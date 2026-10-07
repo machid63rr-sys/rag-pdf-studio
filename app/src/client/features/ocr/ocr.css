@@ -1,0 +1,259 @@
+/* 機能②(PDF → OCR → MD)のスタイル。色・ボタン・通知は、styles.css の共通のクラスと変数を使う */
+
+/* ---- 開始・履歴 ---- */
+.ocr-start-main {
+  display: grid;
+  gap: 16px;
+}
+.ocr-selected-file {
+  margin: 8px 0 0;
+}
+.ocr-history {
+  display: grid;
+  gap: 8px;
+}
+.ocr-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ocr-history h2,
+.ocr-review h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.ocr-history-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ocr-history-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+.ocr-history-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+}
+.ocr-history-name {
+  font-weight: 700;
+  word-break: break-all;
+}
+.ocr-history-time {
+  color: var(--muted);
+  font-size: 12px;
+}
+.ocr-history-error {
+  flex-basis: 100%;
+  color: #b91c1c;
+  font-size: 12px;
+  word-break: break-all;
+}
+.ocr-history-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 状態の表示 */
+.ocr-status-chip {
+  padding: 1px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f3f4f6;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ocr-status-queued,
+.ocr-status-running {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+}
+.ocr-status-draft {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.ocr-status-failed {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+}
+
+/* ---- 実行中・失敗 ---- */
+.ocr-running,
+.ocr-failed {
+  display: grid;
+  gap: 12px;
+}
+.ocr-running h1,
+.ocr-failed h1 {
+  margin: 0;
+  font-size: 20px;
+}
+.ocr-progress {
+  display: grid;
+  gap: 4px;
+}
+.ocr-progress-bar {
+  height: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+}
+.ocr-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.4s ease;
+}
+/* 総ページ数が分からない間は、割合を出さず、動いていることだけを示す */
+.ocr-progress-indeterminate .ocr-progress-fill {
+  width: 30%;
+  animation: ocr-progress-slide 1.2s ease-in-out infinite;
+}
+@keyframes ocr-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+.ocr-progress-label {
+  margin: 0;
+  font-weight: 700;
+}
+
+/* ---- 確認・修正 ---- */
+.ocr-review {
+  display: grid;
+  gap: 12px;
+}
+.ocr-review-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ocr-review-header h1 {
+  margin: 0;
+  font-size: 20px;
+}
+.ocr-review-body {
+  display: grid;
+  grid-template-columns: minmax(300px, 4fr) minmax(0, 6fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .ocr-review-body {
+    grid-template-columns: 1fr;
+  }
+}
+.ocr-review-side,
+.ocr-review-editor {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+/* 要確認の一覧は、長くなっても、本文の編集欄を押し下げないよう、中でスクロールする */
+.ocr-review-side {
+  max-height: 80vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.ocr-segments {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+.ocr-segments > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.ocr-segment-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ocr-segment {
+  padding: 8px 10px;
+  border: 1px solid var(--warning-border);
+  border-radius: 6px;
+  background: var(--warning-bg);
+}
+.ocr-segment-auto_corrected {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+}
+.ocr-segment-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ocr-segment-page {
+  font-weight: 700;
+}
+.ocr-pdf-link {
+  display: inline-block;
+  color: var(--text);
+  text-decoration: none;
+}
+.ocr-segment-candidates {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.ocr-segment-candidates dt {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.ocr-segment-candidates dd {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ocr-segment-reason {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ocr-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ocr-mode-toggle {
+  display: flex;
+  gap: 4px;
+}
+.ocr-source-area {
+  min-height: 420px;
+  max-height: 65vh;
+}
+.ocr-save-status {
+  margin: 0;
+  color: var(--muted);
+}
+.ocr-save-dirty {
+  color: #b45309;
+  font-weight: 700;
+}

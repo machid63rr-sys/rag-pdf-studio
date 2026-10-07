@@ -1,0 +1,8 @@
+# ocr-rag（OCR・RAG登録・検索のAPI）の実行に必要なライブラリ
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+pydantic>=2.0.0
+python-multipart>=0.0.6   # アップロード(multipart/form-data)の受け取りに必須
+psycopg2-binary>=2.9.0
+requests>=2.31.0          # Ollama呼び出し
+jsonschema>=4.19.0        # vision補正のJSON応答の検証

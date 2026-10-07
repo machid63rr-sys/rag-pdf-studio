@@ -1,0 +1,16 @@
+# NVIDIA GPUをOllamaに割り当てる上書き。GPUのある環境で、次のように重ねて使う:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+#
+# 前提: NVIDIAドライバと NVIDIA Container Toolkit がホストに入っていること。
+# GPUが無い環境でこのファイルを重ねると、ollamaが起動に失敗する。GPU無しなら、基本の
+# docker-compose.yml だけで起動する（CPUで動くが、OCRは大幅に遅くなる）。
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

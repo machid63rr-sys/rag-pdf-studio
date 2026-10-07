@@ -1,0 +1,346 @@
+/* ③ RAG(登録・確認)の画面。色・ボタン・通知などの共通の見た目は、styles.css を使う */
+.rag-feature {
+  display: grid;
+  gap: 12px;
+}
+.rag-panel {
+  display: grid;
+  gap: 16px;
+}
+.rag-panel[hidden] {
+  display: none;
+}
+
+/* 登録/確認の切り替え */
+.rag-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.rag-tab {
+  margin-bottom: -1px;
+  padding: 6px 18px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.rag-tab:hover:not(.rag-tab-active) {
+  background: #f3f4f6;
+}
+.rag-tab-active {
+  border-color: var(--border);
+  background: #fff;
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* 登録フォーム */
+.rag-register {
+  display: grid;
+  gap: 12px;
+}
+.rag-drop p {
+  margin: 6px 0;
+}
+.rag-form {
+  display: grid;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+.rag-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.rag-field > label,
+.rag-label {
+  font-weight: 700;
+}
+.rag-wide-input {
+  width: 100%;
+  max-width: 40em;
+}
+.rag-markdown-input {
+  min-height: 220px;
+}
+.rag-preview {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #f9fafb;
+}
+.rag-preview summary {
+  cursor: pointer;
+}
+.rag-success-details {
+  margin: 4px 0 8px;
+  padding-left: 22px;
+}
+.rag-replace-warning {
+  margin-top: 4px;
+}
+
+/* 機器名のチップ */
+.rag-equipment {
+  display: grid;
+  gap: 6px;
+}
+.rag-equipment-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.rag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--info-border);
+  border-radius: 12px;
+  background: var(--info-bg);
+}
+.rag-chip-remove {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.rag-chip-remove:hover:not(:disabled) {
+  color: #b91c1c;
+}
+.rag-pdf-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+.rag-pdf-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 一覧 */
+.rag-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rag-section-header h2,
+.rag-search h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.rag-documents,
+.rag-search {
+  display: grid;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+.rag-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.rag-table th,
+.rag-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.rag-table thead th {
+  background: #f9fafb;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.rag-table tbody th {
+  font-weight: 700;
+}
+.rag-source-name {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.rag-number {
+  text-align: right;
+}
+.rag-chips-static .rag-chip {
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+/* 検索 */
+.rag-search-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-end;
+}
+.rag-field-query {
+  flex: 1 1 20em;
+}
+.rag-search-form .select-input {
+  width: auto;
+  min-width: 7em;
+}
+.rag-results {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rag-results-heading {
+  margin: 8px 0 4px;
+  font-size: 15px;
+}
+.rag-result {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+.rag-result-low {
+  background: #f9fafb;
+}
+.rag-result-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.rag-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.rag-result-low .rag-rank {
+  background: var(--muted);
+}
+.rag-result-title {
+  margin: 0;
+  font-size: 15px;
+}
+.rag-similarity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rag-similarity-bar {
+  display: inline-block;
+  width: 96px;
+  height: 8px;
+  border-radius: 4px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+.rag-similarity-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+.rag-result-low .rag-similarity-fill {
+  background: var(--muted);
+}
+.rag-similarity-value {
+  font-variant-numeric: tabular-nums;
+}
+.rag-low-badge {
+  padding: 0 8px;
+  border: 1px solid var(--warning-border);
+  border-radius: 10px;
+  background: var(--warning-bg);
+  font-size: 12px;
+}
+.rag-result-pdf {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+/* 検索結果・プレビューのMarkdown表示 */
+.rag-markdown {
+  overflow-x: auto;
+  word-break: break-word;
+}
+.rag-markdown > :first-child {
+  margin-top: 0;
+}
+.rag-markdown > :last-child {
+  margin-bottom: 0;
+}
+.rag-markdown table {
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+.rag-markdown th,
+.rag-markdown td {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.rag-markdown th {
+  background: #f3f4f6;
+}
+.rag-markdown pre {
+  overflow-x: auto;
+  padding: 8px;
+  background: #f3f4f6;
+}
+
+/* 本文の中の見出しは、結果の見出し(文書名)より目立たないよう、小さくする */
+.rag-markdown h1,
+.rag-markdown h2,
+.rag-markdown h3,
+.rag-markdown h4,
+.rag-markdown h5,
+.rag-markdown h6 {
+  margin: 0.8em 0 0.3em;
+  font-size: 1em;
+  line-height: 1.4;
+}
+.rag-markdown h1 {
+  font-size: 1.15em;
+}
+.rag-markdown h2 {
+  font-size: 1.08em;
+}
+.rag-markdown p {
+  margin: 0.4em 0;
+}
+
+/* 使えない(無効の)主ボタンも、文字は白のまま読めるようにする(共通の無効表示は、文字が灰色になり、青地で読みにくい) */
+.rag-feature .button-primary:disabled {
+  color: #fff;
+}

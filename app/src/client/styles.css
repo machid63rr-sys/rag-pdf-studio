@@ -1,0 +1,579 @@
+/* 画面全体のスタイル(質素なもの)。文書そのものの見た目は src/shared/document.css */
+:root {
+  color-scheme: light;
+  --border: #d1d5db;
+  --text: #111827;
+  --muted: #6b7280;
+  --primary: #2563eb;
+  --danger-bg: #fef2f2;
+  --danger-border: #fca5a5;
+  --warning-bg: #fffbeb;
+  --warning-border: #fcd34d;
+  --success-bg: #f0fdf4;
+  --success-border: #86efac;
+  --info-bg: #eff6ff;
+  --info-border: #93c5fd;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f9fafb;
+  color: var(--text);
+  font-family: 'Noto Sans CJK JP', 'Noto Sans JP', 'Yu Gothic', 'Meiryo', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.app {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.app-header h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.button {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.button:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+.button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.button-primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+.button-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+/* 無効のときも、文字は白のまま(青地に灰色の文字だと、読みにくい)。無効は、薄さ(opacity)で示す */
+.button-primary:disabled {
+  color: #fff;
+}
+
+.import-view {
+  display: grid;
+  gap: 16px;
+}
+.drop-zone {
+  padding: 32px 16px;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  background: #fff;
+  text-align: center;
+}
+.drop-zone-active {
+  border-color: var(--primary);
+  background: var(--info-bg);
+}
+.drop-zone p {
+  margin: 8px 0;
+}
+.paste-section {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.source-area {
+  display: block;
+  width: 100%;
+  min-height: 420px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font-family: 'DejaVu Sans Mono', 'Noto Sans Mono CJK JP', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.paste-area {
+  min-height: 140px;
+}
+
+.edit-view {
+  display: grid;
+  gap: 12px;
+}
+.source-name {
+  margin: 0;
+  color: var(--muted);
+}
+
+.notice {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid;
+  border-radius: 6px;
+}
+.notice p {
+  margin: 0 0 4px;
+}
+.notice-error {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+}
+.notice-warning {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.notice-success {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.notice-info {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+}
+.warning-list {
+  padding-left: 28px;
+}
+.warning-lines {
+  color: var(--muted);
+}
+.error-detail {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 12px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: -12px;
+}
+.tab {
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: #f3f4f6;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.tab-active {
+  background: #fff;
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* 書式付きエディタ。文書部分(.md-editor-content)の見た目は共有CSSが決める */
+.md-editor {
+  border: 1px solid var(--border);
+  border-radius: 0 6px 6px 6px;
+  background: #fff;
+}
+.md-editor-content {
+  min-height: 360px;
+  max-height: 65vh;
+  overflow-y: auto;
+  padding: 12px 16px;
+  outline: none;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.output-panel,
+.page-settings {
+  display: grid;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+.output-panel h2,
+.page-settings h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.field label {
+  min-width: 11em;
+}
+.page-settings .page-settings-row label {
+  min-width: 0;
+}
+.page-settings .select-input {
+  width: auto;
+  min-width: 8em;
+  margin-right: 12px;
+}
+.page-settings .page-number-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+}
+.page-settings .page-number-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+.text-input {
+  width: 22em;
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+}
+.text-input[aria-invalid='true'] {
+  border-color: #dc2626;
+}
+/* 使えない入力欄は、触れないことが見た目で分かるようにグレーにする */
+.text-input:disabled {
+  background: #f3f4f6;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.file-select {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: 16px;
+}
+.file-select legend {
+  float: left;
+  min-width: 11em;
+  padding: 0;
+}
+.file-select label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 15px;
+  cursor: pointer;
+}
+/* 保存するファイルのチェックボックスは、押しやすいよう大きくする */
+.file-select input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.file-select input[type='checkbox']:disabled {
+  cursor: not-allowed;
+}
+.field-suffix,
+.field-value {
+  color: var(--muted);
+}
+.field-hint {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.field-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: #b91c1c;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 下書き(自動保存)の状態・復元の案内 */
+.draft-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.draft-status.notice {
+  font-size: 14px;
+}
+.draft-section {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid #93c5fd;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+.draft-section p {
+  margin: 0;
+}
+
+/* 取り込み画面: 貼り付ける内容の種類・補足 */
+.drop-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+.paste-kind {
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.paste-kind label {
+  cursor: pointer;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* HTML編集画面。ソースとプレビューを並べるため、横幅を広げる */
+.app-wide {
+  max-width: 1400px;
+}
+.source-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .source-split {
+    grid-template-columns: 1fr;
+  }
+}
+.source-split .source-area {
+  height: 70vh;
+  min-height: 360px;
+  resize: none;
+  white-space: pre;
+  overflow: auto;
+  border-radius: 0 6px 6px 6px;
+}
+
+.html-preview {
+  border: 1px solid var(--border);
+  border-radius: 0 6px 6px 6px;
+  background: #fff;
+}
+.html-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: #f9fafb;
+}
+.html-toolbar-group {
+  display: inline-flex;
+  gap: 4px;
+}
+.button-small {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+/* 利用者のHTMLは、白い紙の上に作られていることが多いため、背景は白にする */
+.html-preview-frame {
+  display: block;
+  width: 100%;
+  height: 70vh;
+  min-height: 360px;
+  border: 0;
+  background: #fff;
+}
+
+/* 取り込み画面: フォルダ・ファイルの選択ボタン、複数の文書から開くファイルの選択 */
+.drop-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.choose-section {
+  padding: 12px 16px;
+  border: 1px solid var(--info-border);
+  border-radius: 8px;
+  background: var(--info-bg);
+}
+.choose-section p {
+  margin: 0 0 8px;
+}
+.choose-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Mermaidのコードブロック: コードの下に、描画した図を表示する */
+.mermaid-preview {
+  padding: 8px 12px;
+  border-top: 1px dashed var(--border);
+  text-align: center;
+}
+.mermaid-image {
+  max-width: 100%;
+  height: auto;
+}
+.mermaid-status,
+.mermaid-error {
+  margin: 0;
+  font-size: 12px;
+  text-align: left;
+}
+.mermaid-status {
+  color: var(--muted);
+}
+.mermaid-error {
+  color: #b91c1c;
+}
+
+/* Mermaidのコードブロック: PDFにどれを出すか(図のみ・コードのみ・両方)の選択 */
+.mermaid-view {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 6px 12px;
+  border: 0;
+  border-top: 1px dashed var(--border);
+  background: #f9fafb;
+  font-size: 13px;
+}
+.mermaid-view legend {
+  float: left;
+  padding: 0;
+  margin-right: 16px;
+  color: var(--muted);
+}
+.mermaid-view label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+/* 手動の改ページの区切り(エディタ内の表示。文書には、<div style="page-break-after: always"></div> として保存される) */
+.page-break-marker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 1em 0;
+  color: #4b5563;
+  font-size: 12px;
+  user-select: none;
+}
+.page-break-marker::before,
+.page-break-marker::after {
+  content: '';
+  flex: 1;
+  border-top: 2px solid #9ca3af;
+}
+.page-break-marker-remove {
+  padding: 0 8px;
+  border: 1px solid #9ca3af;
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+  font-size: 11px;
+  line-height: 18px;
+  cursor: pointer;
+}
+.page-break-marker-remove:hover {
+  background: #f3f4f6;
+}
+.page-break-button {
+  padding: 0 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* プレビューの上に重ねる、PDFのページの区切り */
+.md-editor-drop {
+  position: relative;
+}
+.page-overlay {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+}
+.page-overlay-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  will-change: transform;
+}
+.page-break {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px dashed #e11d48;
+  transition: opacity 0.2s;
+}
+.page-break-stale {
+  opacity: 0.35;
+}
+.page-break-label {
+  position: absolute;
+  right: 8px;
+  top: -11px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: #e11d48;
+  color: #fff;
+  font-size: 11px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.page-status {
+  margin: 6px 2px 0;
+  color: #9f1239;
+  font-size: 12px;
+}
+.page-status-stale {
+  color: var(--muted);
+}
+.page-status-error {
+  color: #b91c1c;
+}

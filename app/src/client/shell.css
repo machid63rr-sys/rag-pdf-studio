@@ -1,0 +1,56 @@
+/* 画面全体の枠(機能の切り替えタブ)。各機能の中身のスタイルは、styles.css と、機能ごとのCSS */
+.shell-nav {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  padding: 8px 16px 0;
+  border-bottom: 1px solid var(--border);
+  background: #fff;
+}
+.shell-brand {
+  align-self: center;
+  padding-bottom: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.shell-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.shell-tab {
+  padding: 8px 18px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.shell-tab:hover:not(.shell-tab-active) {
+  background: #f3f4f6;
+}
+.shell-tab-active {
+  /* 選択中のタブは、枠の下線に重ねて、下の内容とつなげる */
+  margin-bottom: -1px;
+  border-color: var(--border);
+  background: #f9fafb;
+  color: var(--text);
+  font-weight: 700;
+}
+.feature-pane[hidden] {
+  display: none;
+}
+
+/* OCR・RAGサービスが使えないときの案内 */
+.readiness-banner {
+  margin-bottom: 12px;
+}
+.readiness-banner .button {
+  margin-top: 4px;
+}
+.readiness-hint {
+  color: var(--muted);
+}

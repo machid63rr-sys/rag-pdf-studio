@@ -1,0 +1,26 @@
+# テスト専用のpgvector付きPostgres（使い捨て。データはtmpfsに置き、停止で消える）
+#
+#   export TEST_DB_PASSWORD=<任意の値>
+#   docker compose -f docker-compose.test.yml up -d
+#   python -m pytest
+#   docker compose -f docker-compose.test.yml down
+#
+# テストはセッション開始時にDB(TEST_DB_NAME)を作り直してdatabase/schema.sqlを流すので、
+# このコンテナ以外のDBには触れない。
+name: rag-pdf-studio-test
+
+services:
+  test-db:
+    image: pgvector/pgvector:0.8.6-pg15
+    environment:
+      POSTGRES_PASSWORD: ${TEST_DB_PASSWORD:?TEST_DB_PASSWORDを設定してください}
+    ports:
+      # テストはホストから接続する。このPCからのみ接続できるようにする
+      - "127.0.0.1:${TEST_DB_PORT:-55432}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 20

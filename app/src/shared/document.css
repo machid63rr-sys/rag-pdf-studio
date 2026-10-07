@@ -1,0 +1,231 @@
+/*
+ * 文書の見た目。プレビュー(.md-editor-content)とPDF(.document)の両方に同じものを適用し、
+ * 見出し・表の罫線・コードなどの見え方を揃える。
+ * PDFはサーバ上のNoto Sans CJK JPで描画される。プレビューはブラウザのOSフォントになるため、
+ * 字形や折り返し位置が少し異なることがある(ページの区切りは、サーバがPDFと同じ条件で測った位置を、プレビューに重ねて表示する)。
+ */
+:is(.document, .md-editor-content) {
+  font-family: 'Noto Sans CJK JP', 'Noto Sans JP', 'Yu Gothic', 'Meiryo', sans-serif;
+  font-size: 11pt;
+  line-height: 1.7;
+  color: #111827;
+  line-break: strict;
+  overflow-wrap: anywhere;
+}
+
+.document {
+  margin: 0;
+}
+
+:is(.document, .md-editor-content) :is(h1, h2, h3, h4, h5, h6) {
+  line-height: 1.35;
+  margin: 1.3em 0 0.5em;
+  font-weight: 700;
+  break-after: avoid;
+}
+:is(.document, .md-editor-content) h1 {
+  font-size: 1.9em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid #d1d5db;
+}
+:is(.document, .md-editor-content) h2 {
+  font-size: 1.5em;
+}
+:is(.document, .md-editor-content) h3 {
+  font-size: 1.25em;
+}
+:is(.document, .md-editor-content) h4 {
+  font-size: 1.1em;
+}
+:is(.document, .md-editor-content) :is(h5, h6) {
+  font-size: 1em;
+}
+
+:is(.document, .md-editor-content) p {
+  margin: 0.6em 0;
+}
+
+:is(.document, .md-editor-content) :is(ul, ol) {
+  margin: 0.6em 0;
+  padding-left: 1.7em;
+}
+
+/* チェック項目(- [ ] / - [x])だけ、黒丸を付けずにチェックボックスを黒丸の位置に置く。
+   通常の項目と混在する箇条書きでは、通常の項目の黒丸は残す */
+.document .task-list-item {
+  list-style: none;
+}
+.document .task-list-item input[type='checkbox'] {
+  margin: 0 0.4em 0.2em -1.3em;
+  vertical-align: middle;
+}
+
+:is(.document, .md-editor-content) blockquote {
+  margin: 0.8em 0;
+  padding: 0.1em 1em;
+  border-left: 4px solid #d1d5db;
+  color: #4b5563;
+}
+
+:is(.document, .md-editor-content) a {
+  color: #1d4ed8;
+}
+
+:is(.document, .md-editor-content) hr {
+  border: 0;
+  border-top: 1px solid #d1d5db;
+  margin: 1.2em 0;
+}
+
+:is(.document, .md-editor-content) :is(code, pre) {
+  font-family: 'DejaVu Sans Mono', 'Noto Sans Mono CJK JP', 'Consolas', monospace;
+}
+:is(.document, .md-editor-content) code {
+  font-size: 0.92em;
+  background: #f3f4f6;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+:is(.document, .md-editor-content) pre {
+  font-size: 0.92em;
+  white-space: pre-wrap;
+  background: #f3f4f6;
+  padding: 0.7em 0.9em;
+  border-radius: 4px;
+}
+:is(.document, .md-editor-content) pre code {
+  background: none;
+  padding: 0;
+  font-size: 1em;
+}
+
+/* コードの色分け(PDF)。編集画面のコードは、エディタ自身が色分けする。
+   背景(#f3f4f6)の上で読めるよう、濃い色を使う */
+.document .hljs-comment,
+.document .hljs-quote {
+  color: #5a6472;
+  font-style: italic;
+}
+.document .hljs-keyword,
+.document .hljs-selector-tag,
+.document .hljs-doctag,
+.document .hljs-template-tag,
+.document .hljs-meta .hljs-keyword {
+  color: #c22b3d;
+}
+.document .hljs-string,
+.document .hljs-regexp,
+.document .hljs-template-variable {
+  color: #0a3d91;
+}
+.document .hljs-number,
+.document .hljs-literal,
+.document .hljs-attr,
+.document .hljs-attribute,
+.document .hljs-variable.language_,
+.document .hljs-selector-attr,
+.document .hljs-selector-pseudo {
+  color: #0b5cad;
+}
+.document .hljs-title,
+.document .hljs-title.function_,
+.document .hljs-title.class_,
+.document .hljs-selector-id,
+.document .hljs-selector-class {
+  color: #6a3fb5;
+}
+.document .hljs-built_in,
+.document .hljs-type,
+.document .hljs-symbol,
+.document .hljs-bullet,
+.document .hljs-link {
+  color: #b34a00;
+}
+.document .hljs-meta,
+.document .hljs-name,
+.document .hljs-tag {
+  color: #1f7a3a;
+}
+.document .hljs-section {
+  color: #0b5cad;
+  font-weight: 700;
+}
+.document .hljs-strong {
+  font-weight: 700;
+}
+.document .hljs-emphasis {
+  font-style: italic;
+}
+.document .hljs-addition {
+  color: #1a6e2e;
+  background: #dcf5e1;
+}
+.document .hljs-deletion {
+  color: #a3182a;
+  background: #fde2e5;
+}
+
+/* Mermaidの図(PDF)。ページをまたいで切れないようにする */
+.document figure.mermaid-diagram {
+  margin: 0.8em 0;
+  text-align: center;
+  break-inside: avoid;
+}
+.document figure.mermaid-diagram img {
+  max-width: 100%;
+  height: auto;
+  /* 1ページに収まらない縦長の図は、縦横比を保ったまま縮める(直前の見出しと同じページに入る高さにする)。
+     本文の高さ(--page-body-height。用紙・向き・余白で変わる。A4縦・標準なら252mm)から、見出しの分(52mm)を除く */
+  max-height: calc(var(--page-body-height, 252mm) - 52mm);
+  object-fit: contain;
+}
+.document .diagram-error {
+  margin-bottom: 0;
+  color: #a3182a;
+  font-size: 0.9em;
+}
+
+:is(.document, .md-editor-content) table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.8em 0;
+  font-size: 0.92em;
+}
+:is(.document, .md-editor-content) :is(th, td) {
+  border: 1px solid #6b7280;
+  padding: 0.25em 0.5em;
+  vertical-align: top;
+}
+:is(.document, .md-editor-content) th {
+  background: #f3f4f6;
+  font-weight: 700;
+}
+
+:is(.document, .md-editor-content) img {
+  max-width: 100%;
+}
+/* <img width="300" height="166"> のように、大きさを指定した画像が、幅を狭められたとき(max-width)も、縦横比を保つ */
+.document img {
+  height: auto;
+}
+
+/* 手動の改ページ(Markdownの <div style="page-break-after: always"></div>)。その位置で、必ず改ページする。
+   文書の最後にあるものは、改ページしない(中身の無い最後のページができないように) */
+.document .manual-page-break {
+  break-after: page;
+  height: 0;
+  margin: 0;
+}
+.document .manual-page-break:last-child {
+  break-after: auto;
+}
+
+/* 印刷時: 長い表は見出し行を各ページで繰り返し、行の途中では改ページしない */
+@media print {
+  .document thead {
+    display: table-header-group;
+  }
+  .document tr {
+    break-inside: avoid;
+  }
+}

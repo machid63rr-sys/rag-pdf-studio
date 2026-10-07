@@ -1,0 +1,129 @@
+# rag-pdf-studio
+#
+#   cp .env.example .env     # DB_PASSWORD を設定する（必須）
+#   docker compose up -d --build
+#
+# ブラウザで http://localhost:8090 を開く（ポートは .env の HOST_PORT で変更できる）。
+#
+# 初回だけは、インターネットへの接続が必要（イメージのビルドと、Ollamaのモデル約10GBの取得）。
+# 取得したモデルは名前付きボリューム(ollama-data)に残り、2回目以降はオフラインで起動できる。
+# 注意: `docker compose down -v` はボリュームも消すため、モデルの再取得が必要になる
+#       （登録したマニュアル(pgdata)も消える）。止めるだけなら `docker compose down`。
+# NVIDIA GPUを使う場合: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+name: rag-pdf-studio
+
+services:
+  # pgvector付きPostgres。schema.sqlは、データが空の初回起動時にだけ自動で適用される
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ragstudio
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?.env に DB_PASSWORD を設定してください（.env.example を .env にコピーして編集）}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ragstudio"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # ローカルLLM実行基盤。ホストへはポートを公開しない（compose内のocr-ragだけが使う）
+  ollama:
+    image: ollama/ollama:0.32.5
+    restart: unless-stopped
+    environment:
+      # 一度ロードしたモデルを保持する（既定は5分でアンロードされ、次の呼び出しで再ロード待ちが
+      # 起きる。OCR・登録・検索でモデルを使い分けるため、入れ替わりを減らす）。
+      # メモリが少ない環境では、.env で 5m などに変える
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:--1}
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # 必要なモデルを、未取得のものだけ取得する一回限りのジョブ（scripts/ollama-init.sh）。
+  # 失敗すると、ocr-rag・appは起動しない（`docker compose up` が失敗として見える）
+  ollama-init:
+    image: ollama/ollama:0.32.5
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      REQUIRED_MODELS: ${EMBEDDING_MODEL:-bge-m3} ${OCR_MODEL:-glm-ocr} ${OCR_VISION_MODEL:-qwen3.5:9b}
+    volumes:
+      - ./scripts/ollama-init.sh:/scripts/ollama-init.sh:ro
+    entrypoint: ["/bin/bash", "/scripts/ollama-init.sh"]
+
+  # OCR・RAG登録・検索のAPI。ホストへはポートを公開しない（appが中継する）
+  ocr-rag:
+    build: ./ocr-rag
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ragstudio
+      DB_USER: postgres
+      DB_PASSWORD: ${DB_PASSWORD}
+      OLLAMA_HOST: http://ollama:11434
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
+      OCR_MODEL: ${OCR_MODEL:-glm-ocr}
+      OCR_VISION_MODEL: ${OCR_VISION_MODEL:-qwen3.5:9b}
+      OCR_VISION_TIMEOUT_SECONDS: ${OCR_VISION_TIMEOUT_SECONDS:-120}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-104857600}
+    # OCR中の一時ファイルは /tmp に書く。それ以外は読み取り専用にして、コンテナ側で権限を絞る
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  # 画面（編集・OCR・RAG）とPDF生成。ocr-ragへの中継もここ
+  app:
+    build:
+      context: ./app
+      target: runtime
+    restart: unless-stopped
+    # Chromiumの子プロセスを確実に回収する
+    init: true
+    depends_on:
+      ocr-rag:
+        condition: service_healthy
+    ports:
+      # 認証機能が無いため、既定ではこのPCからのみ接続できる(変更は .env の BIND_ADDR)
+      - "${BIND_ADDR:-127.0.0.1}:${HOST_PORT:-8090}:8080"
+    environment:
+      OCR_RAG_URL: http://ocr-rag:8000
+      MAX_MARKDOWN_BYTES: ${MAX_MARKDOWN_BYTES:-31457280}
+      PDF_TIMEOUT_MS: ${PDF_TIMEOUT_MS:-60000}
+      # ocr-ragへ中継するアップロードの上限。ocr-ragの上限(MAX_UPLOAD_BYTES)より10MB大きくし、
+      # 上限の判定はocr-ragに任せる(multipartの付加分があるため、同じ値にしない)
+      RAG_MAX_UPLOAD_BYTES: ${RAG_MAX_UPLOAD_BYTES:-115343360}
+    # Chromiumの共有メモリ(既定の64MBでは大きな文書で落ちる)
+    shm_size: "1gb"
+    # PDF生成のChromiumは --no-sandbox で動かすため、コンテナ側で権限を絞る
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  pgdata:
+  ollama-data:
