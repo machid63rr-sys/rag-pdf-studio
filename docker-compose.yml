@@ -31,8 +31,10 @@ services:
       retries: 20
 
   # ローカルLLM実行基盤。ホストへはポートを公開しない（compose内のocr-ragだけが使う）
+  # イメージのバージョンは、.env の OLLAMA_VERSION で変えられる（ollama-init と同じ値にすること）。
+  # 新しいモデルは、新しいOllamaでないと取得できない（"requires a newer version of ollama"）
   ollama:
-    image: ollama/ollama:0.32.5
+    image: ollama/ollama:${OLLAMA_VERSION:-0.32.5}
     restart: unless-stopped
     environment:
       # 一度ロードしたモデルを保持する（既定は5分でアンロードされ、次の呼び出しで再ロード待ちが
@@ -50,7 +52,7 @@ services:
   # 必要なモデルを、未取得のものだけ取得する一回限りのジョブ（scripts/ollama-init.sh）。
   # 失敗すると、ocr-rag・appは起動しない（`docker compose up` が失敗として見える）
   ollama-init:
-    image: ollama/ollama:0.32.5
+    image: ollama/ollama:${OLLAMA_VERSION:-0.32.5}
     restart: "no"
     depends_on:
       ollama:
