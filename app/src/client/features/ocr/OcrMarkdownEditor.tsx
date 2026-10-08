@@ -7,7 +7,6 @@ import {
   thematicBreakPlugin,
   linkPlugin,
   tablePlugin,
-  codeBlockPlugin,
   markdownShortcutPlugin,
   toolbarPlugin,
   UndoRedo,
@@ -15,10 +14,14 @@ import {
   BlockTypeSelect,
   ListsToggle,
   InsertTable,
+  InsertCodeBlock,
+  InsertThematicBreak,
   Separator,
 } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
+import { codeBlockPlugins } from '../../codeBlockPlugins';
 import { escapeForMdx, unescapeFromMdx } from '../../mdxEscape';
+import { InsertPageBreak, pageBreakPlugin } from '../../pageBreakPlugin';
 
 interface OcrMarkdownEditorProps {
   // 編集モードに入った時点のMarkdown(以降の変更は内部で保持し、onChangeで親へ通知する)
@@ -30,8 +33,12 @@ interface OcrMarkdownEditorProps {
 
 /**
  * OCR結果の、書式付き(WYSIWYG)編集。描画された見出し・表・箇条書きをそのまま編集でき、
- * 編集内容は裏のMarkdownへ反映される。PDF出力向けの機能(改ページ・画像の埋め込み・図)は持たない
- * 軽い構成(それらは「① MD/HTML → PDF」の編集画面で行う)。
+ * 編集内容は裏のMarkdownへ反映される。OCR結果に、人が内容を足せるよう、表・コードブロック・区切り線・改ページを
+ * ツールバーから入れられる(「① MD/HTML → PDF」の編集画面と同じ部品)。画像の埋め込み・PDFのページの区切り位置の
+ * 表示は持たない軽い構成(それらは「① MD/HTML → PDF」の編集画面で行う)。
+ *
+ * - 改ページは、「改ページ」の区切りとして表示し、<div style="page-break-after: always"></div> の1行として保存する
+ *   (pageBreakPlugin.tsx)。「① PDFにして出力へ」で渡したPDFで、その位置から新しいページになる
  *
  * - 編集モードを切り替えるたびに再マウントされ、その時点のMarkdownから開始する
  *   (このコンポーネントの外でMarkdownが書き換わる経路は、構文モードのtextareaのみ)
@@ -56,8 +63,9 @@ const OcrMarkdownEditor: React.FC<OcrMarkdownEditorProps> = ({ initialMarkdown, 
       thematicBreakPlugin(),
       linkPlugin(),
       tablePlugin(),
-      // OCR結果にコードフェンスが混ざることがあるため、解釈できるよう有効化する
-      codeBlockPlugin({ defaultCodeBlockLanguage: 'txt' }),
+      pageBreakPlugin(),
+      // OCR結果にコードフェンスが混ざることがあるため、解釈できるよう有効化する。ボタンで入れたブロックも、同じ設定で表示する
+      ...codeBlockPlugins(),
       markdownShortcutPlugin(),
       toolbarPlugin({
         toolbarContents: () => (
@@ -69,6 +77,9 @@ const OcrMarkdownEditor: React.FC<OcrMarkdownEditorProps> = ({ initialMarkdown, 
             <ListsToggle />
             <Separator />
             <InsertTable />
+            <InsertCodeBlock />
+            <InsertThematicBreak />
+            <InsertPageBreak />
           </>
         ),
       }),

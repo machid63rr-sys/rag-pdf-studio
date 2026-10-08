@@ -9,8 +9,6 @@ import {
   tablePlugin,
   imagePlugin,
   frontmatterPlugin,
-  codeBlockPlugin,
-  codeMirrorPlugin,
   markdownShortcutPlugin,
   toolbarPlugin,
   UndoRedo,
@@ -23,14 +21,13 @@ import {
   Separator,
 } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
-import { isMermaidLanguage } from '../shared/mermaid';
 import { blankParagraphPlugin } from './blankParagraphPlugin';
 import { lineBreakPlugin } from './lineBreakPlugin';
 import { blankParagraphsToNbsp } from './blankLines';
+import { codeBlockPlugins } from './codeBlockPlugins';
 import { rangeAtPoint } from './dropPoint';
 import { embedProblemOf, readImages, summarize, type EmbedNotice } from './embedImage';
 import { escapeForMdx, unescapeFromMdx } from './mdxEscape';
-import MermaidBlockEditor from './MermaidBlockEditor';
 import { InsertPageBreak, pageBreakPlugin } from './pageBreakPlugin';
 import PageBreakOverlay from './PageBreakOverlay';
 import type { PageLayoutState } from './usePageLayout';
@@ -50,32 +47,6 @@ interface RichMarkdownEditorProps {
   // いまのMarkdown(測定した内容と違えば、区切りの位置は、測り直すまで、古い)
   markdown: string;
 }
-
-// 一覧に無い言語のコードブロックも、解釈エラーにならず通常どおり扱われる(実測済み)
-const CODE_BLOCK_LANGUAGES = {
-  txt: 'テキスト',
-  md: 'Markdown',
-  json: 'JSON',
-  yaml: 'YAML',
-  js: 'JavaScript',
-  jsx: 'JSX',
-  ts: 'TypeScript',
-  tsx: 'TSX',
-  python: 'Python',
-  bash: 'Bash',
-  sh: 'Shell',
-  sql: 'SQL',
-  html: 'HTML',
-  css: 'CSS',
-  java: 'Java',
-  cs: 'C#',
-  cpp: 'C++',
-  c: 'C',
-  go: 'Go',
-  rust: 'Rust',
-  diff: 'Diff',
-  mermaid: 'Mermaid',
-};
 
 /**
  * 書式付き(WYSIWYG)編集。描画された見出し・表・箇条書きをそのまま編集でき、
@@ -185,12 +156,7 @@ const RichMarkdownEditor: React.FC<RichMarkdownEditorProps> = ({ initialMarkdown
           tablePlugin(),
           imagePlugin({ imagePreviewHandler: resolveImage, imageUploadHandler: embedImage }),
           frontmatterPlugin(),
-          // Mermaidのコードブロックだけ、図も表示するエディタにする(それ以外は、codeMirrorPluginの色分けつきエディタ)
-          codeBlockPlugin({
-            defaultCodeBlockLanguage: 'txt',
-            codeBlockEditorDescriptors: [{ priority: 100, match: (language) => isMermaidLanguage(language), Editor: MermaidBlockEditor }],
-          }),
-          codeMirrorPlugin({ codeBlockLanguages: CODE_BLOCK_LANGUAGES }),
+          ...codeBlockPlugins(),
           markdownShortcutPlugin(),
           toolbarPlugin({
             toolbarContents: () => (

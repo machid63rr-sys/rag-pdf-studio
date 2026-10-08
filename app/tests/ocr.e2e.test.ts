@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { ElementHandle } from 'puppeteer-core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DiffSegment } from '../src/client/ragApi.js';
+import { PAGE_BREAK_MARKUP } from '../src/shared/pageBreak.js';
 import { startE2eStack, type E2ePage, type E2eStack } from './support/e2eHarness.js';
 import type { FakeDraft } from './support/fakeRagServer.js';
 
@@ -375,6 +376,45 @@ describe('確認・修正', () => {
 
     expect(stack.rag.draftOf(draft.id).draft_markdown).toContain('書式付きで追記');
     expect(stack.rag.draftOf(draft.id).draft_markdown).toContain('圧縮機高圧異常');
+  });
+
+  it('書式付きエディタのツールバーから、区切り線・改ページ・コードブロックを入れて、保存できる。保存した内容は、読み込み直しても、同じ表示になる', async () => {
+    const draft = await openReviewDraft();
+    const clickTool = async (label: string): Promise<void> => {
+      await view.page.click(`${PANE} [role="toolbar"] button[aria-label="${label}"]`);
+    };
+
+    // 文書の末尾にカーソルを置いて、順に入れる
+    await view.page.click(`${PANE} .md-editor-content`);
+    await view.page.keyboard.down('Control');
+    await view.page.keyboard.press('End');
+    await view.page.keyboard.up('Control');
+    await clickTool('Insert thematic break');
+    await clickTool('改ページを入れる(PDFで、ここから新しいページになります)');
+    await clickTool('Insert Code Block');
+    await view.page.waitForSelector(`${PANE} .md-editor-content .cm-content`);
+    await view.page.type(`${PANE} .md-editor-content .cm-content`, 'echo hello');
+    await stack.screenshot(view.page, 'ocr-4b-review-insert-blocks');
+
+    await waitForText('未保存の修正があります');
+    await clickButton('修正を保存');
+    await waitForText('保存しました');
+    const saved = stack.rag.draftOf(draft.id).draft_markdown;
+    expect(saved).toContain(MARKDOWN.trimEnd());
+    expect(saved).toMatch(/\n\*\*\*\n/); // 区切り線
+    expect(saved).toContain(`\n${PAGE_BREAK_MARKUP}\n`); // 改ページの印(独立した1行)
+    expect(saved).toContain('```txt\necho hello\n```'); // コードブロック(既定の言語はテキスト)
+
+    // 構文モードで見ても同じ。書式付きに戻すと、改ページは、印の文字ではなく、「改ページ」の区切りとして表示される
+    await clickButton('Markdown構文');
+    expect(await view.page.$eval(`${PANE} textarea.ocr-source-area`, (e) => (e as HTMLTextAreaElement).value)).toBe(saved);
+    await clickButton('書式付き');
+    await view.page.waitForSelector(`${PANE} .md-editor-content .page-break-marker`);
+    const editorText = await view.page.$eval(`${PANE} .md-editor-content`, (e) => e.textContent ?? '');
+    expect(editorText).not.toContain('page-break-after');
+    expect(editorText).toContain('echo hello');
+    // 読み込み直しただけでは、本文は変わらない(未保存にならない)
+    expect(await paneText()).not.toContain('未保存の修正があります');
   });
 
   it('「本文の該当箇所へ」で、構文モードに切り替わり、該当箇所が選択される', async () => {
