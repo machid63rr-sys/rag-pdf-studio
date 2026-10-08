@@ -102,6 +102,18 @@ def _call_glm_once(
         },
         timeout=timeout_seconds,
     )
+    if response.status_code >= 500:
+        # 2026-10-08: ollama 0.40.1+glm-ocrで、生成の途中(画像の読み込みが終わり、数百トークンを出力した後)に、
+        # POST /api/generate が 500 を返し、サーバーログにはエラーの行が無く "srv stop: cancel task" だけが残る事象を確認した。
+        # 0.32.5で、同じ止まり方が 200+done:false だったもの(上のコメント)が、500に変わった可能性がある(未確認)。
+        # raise_for_statusで例外にすると、リトライも要確認への切り替えもできず、OCR全体が止まるため、
+        # done:falseと同じく「完了しなかった」として扱い、温度/seedを変えて再試行させる。
+        # 原因を追えるよう、Ollamaが返したエラー本文をログに残す(例外では本文が捨てられる)
+        logger.warning(
+            f"GLM-OCRの呼び出しがHTTP {response.status_code}で失敗しました(model={model})。"
+            f"Ollamaの応答: {response.text.strip()[:500]!r}"
+        )
+        return "", False
     response.raise_for_status()
     data = response.json()
 
