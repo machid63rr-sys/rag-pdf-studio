@@ -1,5 +1,5 @@
 """src/manuals/ocr_diff.py のテスト（純粋関数なのでユニットテストのみ）"""
-from ocr_rag.ocr.ocr_diff import diff_page, normalize_for_diff
+from ocr_rag.ocr.ocr_diff import candidate_similarity, diff_page, normalize_for_diff
 
 
 class TestNormalizeForDiff:
@@ -16,6 +16,34 @@ class TestNormalizeForDiff:
 
     def test_blank_line_becomes_empty_string(self):
         assert normalize_for_diff("   ") == ""
+
+
+class TestCandidateSimilarity:
+    """補正LLMの出力が、候補を土台にした修正か、候補と無関係な文字列(文字化け)かを見分ける"""
+
+    def test_same_text_is_1(self):
+        assert candidate_similarity("圧縮機高圧異常", ["圧縮機高圧異常"]) == 1.0
+
+    def test_whitespace_newline_and_markdown_marks_are_not_differences(self):
+        # LLMは、候補を写すときに、空白・改行の位置を変えることがある
+        assert candidate_similarity("SAMPLE 保持フレーム", ["SAMPLE\n保持フレーム\n"]) == 1.0
+        assert candidate_similarity("# Description", ["Description\n"]) == 1.0
+
+    def test_uses_the_closest_candidate(self):
+        assert candidate_similarity("コントロラのバッテリ", ["コントローラのバッテリ", "コントロラのバッテリ"]) == 1.0
+
+    def test_one_character_fix_stays_high(self):
+        assert candidate_similarity("パネルの枚数により表面積が決まります。", ["バネルの枚数により表面積が決まります。"]) > 0.9
+
+    def test_garbled_text_unrelated_to_candidates_is_low(self):
+        """実機の図入りPDFで、正しく読めていた表を置き換えた文字化けの例(内容は、一般的な語に置き換えてある)"""
+        garbled = "©ネルeリ角\n.................................. ネルeン貤"
+        primary = "| 対策 | | --- | --- | | ①パネルの損傷 ………………………………パネルを取り替える | | ②シールが破損または変形 …………………シール を取り替える"
+        alt = "① パネルの損傷………………………………パネルを取り替える\n② シールが破損または変形………………………………シールを取り替える\n"
+        assert candidate_similarity(garbled, [primary, alt]) < 0.5
+
+    def test_no_candidates_is_0(self):
+        assert candidate_similarity("何か", []) == 0.0
 
 
 class TestDiffPage:

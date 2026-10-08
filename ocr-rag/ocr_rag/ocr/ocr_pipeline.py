@@ -11,6 +11,13 @@ vision LLM(主文) + GLM-OCR(比較) + diff + vision補正の全体オーケス�
    組み立て、最終的なdraft_markdownは主文(vision LLM)をベースに自動修正箇所だけ
    置換する。still_uncertain=Trueの箇所はLLMの提案を採用せず主文を暫定採用する
    （画像を見ても判定できない=信頼できる根拠が無い、ため保守的に倒す）。
+   LLMの提案が、主文・比較候補のどちらとも大きく異なる(類似度が低い)場合も、文字化けの恐れが
+   高いため採用せず、主文を残して要確認にする（MIN_CORRECTION_SIMILARITY参照）。
+6. 補正が主文を書き換えた箇所を、別の根拠で再チェックする(correction_recheck.py)。PDFのテキスト層
+   (文字として埋め込まれた文字列)に、補正後・主文のどちらの表記があるかを照合し、無い・決められない箇所は、
+   前後の文脈つきで、日本語として正しいのはどちらかを(画像を使わず)LLMに判定させる。
+   補正後より主文が正しいと確認できたら、補正を取り消して主文に戻す(補正LLMが、弱い方の候補で、
+   正しい主文を上書きする誤りへの対処。2026-10-08)。
 
 失敗時の扱い（サイレントに正としない）:
 - vision LLMのフルページOCR自体が失敗した場合のみ、GLM-OCRを暫定の主文とし、
@@ -38,9 +45,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-from ocr_rag.ocr.ocr_diff import DiffSegment, diff_page
+from ocr_rag.ocr.correction_recheck import BASIS_TEXT_LAYER, RecheckItem, recheck_corrections
+from ocr_rag.ocr.ocr_diff import DiffSegment, candidate_similarity, diff_page
 from ocr_rag.ocr.ocr_engines import DEFAULT_GLM_OCR_MODEL, ocr_with_glm
 from ocr_rag.ocr.pdf_images import convert_pdf_to_images
+from ocr_rag.ocr.pdf_text import extract_page_texts, has_text_layer, squash_for_search
 from ocr_rag.ocr.table_repair import repair_markdown_tables
 from ocr_rag.ocr.vision_correction import (
     DEFAULT_VISION_MODEL,
@@ -61,6 +70,23 @@ logger = logging.getLogger(__name__)
 # 「判定不能+補正テキスト空」で返す壊れ方をすると検知をすり抜け、壊れた比較結果が
 # そのまま採用され要確認が大量に出た(実機ドラフトで9件)ため、数え方を要確認全般に広げた
 MAX_UNRESOLVED_SEGMENTS_FOR_PARTIAL_DIFF = 3
+
+# 2026-10-08: 補正LLMの提案を採用してよい、候補(主文・比較候補)との類似度の下限(0〜1)。
+# 画像入りのPDF(図・吹き出しのあるページ)で、補正LLMが、主文では正しく読めていた箇所を、候補と無関係な
+# 文字化け(「①〜の損傷…〜を取り替える」のような正しい行→「©ネルeリ角 …」のような無関係な文字列)に置き換え、
+# 本文から正しい内容が消える不具合を、実機の下書き3件(図・吹き出しのあるPDFと、文字だけの表のPDF)で確認した。
+# その下書きの自動修正10件で、最も近い候補との類似度(ocr_diff.candidate_similarity)は、文字化けした3件が0.03〜0.17、
+# それ以外(1字の直し・空白や改行の違い・吹き出しの文字の結合)が0.78以上と、はっきり分かれたため、中間の0.6にした。
+# 10件だけの実測なので、実PDFを増やして、誤って止めている(正しい補正が要確認に回る)例が無いか、確認すること。
+# 下回った場合は、提案を採用せず主文を残し、要確認にする(still_uncertainと同じ扱い)。
+# 限界: 弱い方の候補をそのまま選ぶ誤り(類似度1.0)は、これでは防げない。
+MIN_CORRECTION_SIMILARITY = 0.6
+
+# 補正案を、要確認の理由に示すときの最大文字数(文字化けが長くても、画面の判定理由を埋めないため)
+_MAX_PROPOSAL_CHARS_IN_REASON = 60
+
+# 補正の再チェック(correction_recheck.py)で、日本語として正しいかの判断に使う、補正箇所の前後の文字数
+_RECHECK_CONTEXT_CHARS = 40
 
 # vision LLMを自己比較のため2回目に呼び出す際のパラメータ。1回目(temperature=0、決定的)と
 # 異なる値にしないと毎回同一出力になりdiffが機能しない
@@ -147,9 +173,59 @@ class OcrDraftResult:
         ]
 
 
+def _shown(text: str) -> str:
+    """補正案を、要確認の理由に示すための、1行・短い文字列(文字化けが長くても、画面の判定理由を埋めない)"""
+    shown = " ".join(text.split())
+    return shown[:_MAX_PROPOSAL_CHARS_IN_REASON] + "…" if len(shown) > _MAX_PROPOSAL_CHARS_IN_REASON else shown
+
+
+def _recheck_corrections(
+    diff_segs: List[DiffSegment], segments: List[Dict], final_parts: List[str], page_number: int,
+    page_text: Optional[str], ollama_host: str, vision_model: str, vision_timeout_seconds: int
+) -> None:
+    """
+    補正が主文を書き換えた箇所(auto_corrected)を、「PDFにそう書かれているか」「日本語として正しいか」で
+    再チェックし、取り消す箇所は、segments・final_partsを書き換えて、主文に戻す(correction_recheck.py参照)。
+    主文と同じ内容(空白・改行の違いだけ)への補正は、書き換えではないため、対象にしない。
+    """
+    items: List[RecheckItem] = []
+    for index, (seg, entry) in enumerate(zip(diff_segs, segments)):
+        if entry["status"] != "auto_corrected" or not seg.glm_text.strip() or not entry["final_text"].strip():
+            continue
+        if candidate_similarity(entry["final_text"], [seg.glm_text]) >= 1.0:
+            continue
+        items.append(RecheckItem(
+            segment_id=seg.segment_id, primary=seg.glm_text, chosen=entry["final_text"],
+            before="".join(s.glm_text for s in diff_segs[:index])[-_RECHECK_CONTEXT_CHARS:],
+            after="".join(s.glm_text for s in diff_segs[index + 1:])[:_RECHECK_CONTEXT_CHARS],
+        ))
+    if not items:
+        return
+
+    verdicts = recheck_corrections(items, page_text, ollama_host, model=vision_model, timeout_seconds=vision_timeout_seconds)
+    for index, (seg, entry) in enumerate(zip(diff_segs, segments)):
+        verdict = verdicts.get(seg.segment_id)
+        if verdict is None or entry["status"] != "auto_corrected":
+            continue
+        if verdict.keep_chosen:
+            if verdict.basis == BASIS_TEXT_LAYER:
+                entry["reason"] = f"{entry['reason'] or ''}({verdict.reason})"
+            continue
+        proposal = _shown(entry["final_text"])
+        # 補正を取り消して、主文を残す。PDFのテキスト層で主文が確認できたときは、確認済みのため要確認にしない
+        entry["status"] = "match" if verdict.basis == BASIS_TEXT_LAYER else "needs_review"
+        entry["final_text"] = seg.glm_text
+        entry["reason"] = f"補正案を取り消し、主文を残しました。{verdict.reason}(補正案: {proposal})"
+        final_parts[index] = seg.glm_text
+        logger.warning(
+            f"補正の再チェックで、補正案を取り消しました: p.{page_number} {seg.segment_id} basis={verdict.basis}"
+        )
+
+
 def _build_page_result(
     page_number: int, glm_text: str, glm_alt_text: str, review_marker_reason: Optional[str],
-    image_path: Path, ollama_host: str, vision_model: str, vision_timeout_seconds: int
+    image_path: Path, ollama_host: str, vision_model: str, vision_timeout_seconds: int,
+    page_text: Optional[str] = None
 ) -> PageResult:
     diff_segs: List[DiffSegment] = diff_page(glm_text, glm_alt_text)
 
@@ -200,9 +276,25 @@ def _build_page_result(
                     f"corrected_text_len={len(correction.corrected_text.strip())} reason={correction.reason!r}"
                 )
             else:
-                status = "auto_corrected"
-                final_text = normalize_ocr_markup(correction.corrected_text)
-                reason = correction.reason
+                proposal = normalize_ocr_markup(correction.corrected_text)
+                similarity = candidate_similarity(proposal, [seg.glm_text, seg.glm_alt_text])
+                if similarity < MIN_CORRECTION_SIMILARITY:
+                    # 主文・比較候補のどちらとも大きく違う提案は、画像を根拠にした修正ではなく、文字化け・幻覚の
+                    # 恐れが高い(MIN_CORRECTION_SIMILARITYのコメント参照)。LLMが付けた理由も、信用できないため使わない
+                    status = "needs_review"
+                    final_text = seg.glm_text  # 提案は採用せず、主文を残す
+                    reason = (
+                        f"vision LLMの補正案が、主文・比較候補のどちらとも大きく異なる"
+                        f"(最も近い候補との類似度{similarity:.0%})ため、採用せず主文を残しました。補正案: {_shown(proposal)}"
+                    )
+                    logger.warning(
+                        f"vision LLMの補正案を、候補との類似度が低いため採用せず要確認にしました: "
+                        f"p.{page_number} {seg.segment_id} similarity={similarity:.2f}"
+                    )
+                else:
+                    status = "auto_corrected"
+                    final_text = proposal
+                    reason = correction.reason
 
         final_parts.append(final_text)
         segments.append({
@@ -213,6 +305,10 @@ def _build_page_result(
             "final_text": final_text,
             "reason": reason,
         })
+
+    _recheck_corrections(
+        diff_segs, segments, final_parts, page_number, page_text, ollama_host, vision_model, vision_timeout_seconds
+    )
 
     if review_marker_reason is not None:
         # ページ全体が要確認であることが一覧で分かるよう先頭に目印セグメントを追加する
@@ -231,7 +327,8 @@ def _build_page_result(
 
 def _build_page_from_primary(
     page_number: int, primary_text: str, glm_text: str,
-    image_path: Path, ollama_host: str, vision_model: str, vision_timeout_seconds: int
+    image_path: Path, ollama_host: str, vision_model: str, vision_timeout_seconds: int,
+    page_text: Optional[str] = None
 ) -> PageResult:
     """
     主文(vision LLMのフルページOCR)に対する比較材料を選んで1ページ分を組み立てる。
@@ -241,7 +338,7 @@ def _build_page_from_primary(
     if glm_text:
         candidate_page = _build_page_result(
             page_number, primary_text, glm_text, None,
-            image_path, ollama_host, vision_model, vision_timeout_seconds
+            image_path, ollama_host, vision_model, vision_timeout_seconds, page_text=page_text
         )
         # candidate_pageはreview_marker_reason=Noneで組み立てているため、status=needs_reviewの
         # セグメントは全て補正LLMが判定を確定できなかったもの
@@ -261,7 +358,7 @@ def _build_page_from_primary(
     if alt_text:
         return _build_page_result(
             page_number, primary_text, normalize_ocr_markup(alt_text), None,
-            image_path, ollama_host, vision_model, vision_timeout_seconds
+            image_path, ollama_host, vision_model, vision_timeout_seconds, page_text=page_text
         )
 
     # 2026-09-29(7): 2回目も失敗した場合は自己検証結果を使う。matches_image=Falseでも
@@ -272,7 +369,7 @@ def _build_page_from_primary(
     if matches_image or corrected_text != primary_text:
         return _build_page_result(
             page_number, primary_text, normalize_ocr_markup(corrected_text), None,
-            image_path, ollama_host, vision_model, vision_timeout_seconds
+            image_path, ollama_host, vision_model, vision_timeout_seconds, page_text=page_text
         )
     # 検証呼び出し自体が失敗(接続エラー・スキーマ不正)し有効な修正案を得られなかった
     # 場合のみ、保守的にページ全体を要確認扱いにする
@@ -289,7 +386,7 @@ def _build_page_from_primary(
 
 def _ocr_page(
     page_number: int, image_path: Path, ollama_host: str, glm_model: str,
-    vision_model: str, vision_timeout_seconds: int
+    vision_model: str, vision_timeout_seconds: int, page_text: Optional[str] = None
 ) -> PageResult:
     primary_text = ocr_full_page_with_vision_llm(
         image_path, ollama_host, model=vision_model, timeout_seconds=vision_timeout_seconds
@@ -313,7 +410,7 @@ def _ocr_page(
 
     return _build_page_from_primary(
         page_number, normalize_ocr_markup(primary_text.strip()), glm_text,
-        image_path, ollama_host, vision_model, vision_timeout_seconds
+        image_path, ollama_host, vision_model, vision_timeout_seconds, page_text=page_text
     )
 
 
@@ -350,10 +447,16 @@ def run_ocr_pipeline(
         if on_progress is not None:
             on_progress(0, len(images))
 
+        # 補正の再チェック用に、PDFのテキスト層を取り出す(スキャンしたPDF・取り出せない場合は、使わない)
+        page_texts = extract_page_texts(pdf_path, password=password)
+
         pages: List[PageResult] = []
         for i, image_path in enumerate(images, 1):
             logger.info(f"OCR実行中: p.{i}/{len(images)}")
-            pages.append(_ocr_page(i, image_path, ollama_host, glm_model, vision_model, vision_timeout_seconds))
+            page_text = page_texts[i - 1] if page_texts is not None and i - 1 < len(page_texts) else None
+            if page_text is not None and not has_text_layer(squash_for_search(page_text)):
+                page_text = None  # このページには、テキスト層が無い(スキャン・図だけのページ)
+            pages.append(_ocr_page(i, image_path, ollama_host, glm_model, vision_model, vision_timeout_seconds, page_text=page_text))
             if on_progress is not None:
                 on_progress(i, len(images))
 

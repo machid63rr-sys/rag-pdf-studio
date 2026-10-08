@@ -14,7 +14,8 @@ GLM-OCR(1回実行)。ocr_full_page_with_vision_llmのモックはtemperature引
 """
 import pytest
 
-from ocr_rag.ocr import ocr_pipeline
+from ocr_rag.ocr import correction_recheck, ocr_pipeline
+from ocr_rag.ocr.correction_recheck import BASIS_LANGUAGE, BASIS_NONE, RecheckVerdict
 from ocr_rag.ocr.vision_correction import MISSING_JUDGMENT_REASON, VisionCorrectionResult
 
 
@@ -41,10 +42,18 @@ def _glm_returns(text, is_complete=True):
     return _fake
 
 
-def _setup(monkeypatch, vision_mapping, glm=("", True)):
+def _keep_all_corrections(items, page_text, ollama_host, model=None, timeout_seconds=None):
+    """補正の再チェックの偽実装(既定): 何も取り消さない。実際のLLM・PDFには接続しない"""
+    return {item.segment_id: RecheckVerdict(item.segment_id, True, BASIS_NONE, "") for item in items}
+
+
+def _setup(monkeypatch, vision_mapping, glm=("", True), page_texts=None):
     monkeypatch.setattr(ocr_pipeline, "convert_pdf_to_images", _fake_convert_pdf_to_images)
     monkeypatch.setattr(ocr_pipeline, "ocr_full_page_with_vision_llm", _vision_ocr_by_temperature(vision_mapping))
     monkeypatch.setattr(ocr_pipeline, "ocr_with_glm", _glm_returns(*glm))
+    # PDFのテキスト層の取り出しと、補正の再チェックは、既定では、外部(pdftotext・LLM)を使わない偽実装にする
+    monkeypatch.setattr(ocr_pipeline, "extract_page_texts", lambda *a, **k: page_texts)
+    monkeypatch.setattr(ocr_pipeline, "recheck_corrections", _keep_all_corrections)
 
 
 def _fix_first_mismatch(corrected_text):
@@ -217,6 +226,136 @@ class TestRunOcrPipelineWithVisionLlmAsPrimary:
         assert corrected_seg["status"] == "auto_corrected"
         assert corrected_seg["final_text"] == "25.0"
         assert result.pages[0].final_text == "R-1温度 25.0"
+
+    def test_correction_unrelated_to_both_candidates_is_not_adopted(self, tmp_path, monkeypatch):
+        """
+        2026-10-08: 実機の図入りPDFで、主文では正しく読めていた表を、補正LLMが
+        候補と無関係な文字化けに置き換え、本文から正しい内容が消えた。候補のどちらとも大きく異なる提案は
+        採用せず、主文を残して要確認にする。
+        """
+        primary = "①パネルの損傷……………………………パネルを取り替える"
+        alt = "① パネルの損傷…………………………………パネルを取り替える"
+        garbled = "©ネルeリ角\n.................................. ネルeン貤"
+        _setup(monkeypatch, {0.0: primary}, glm=(alt, True))
+        monkeypatch.setattr(ocr_pipeline, "correct_page_with_vision_llm", _fix_first_mismatch(garbled))
+
+        result = ocr_pipeline.run_ocr_pipeline(tmp_path / "manual.pdf")
+
+        segment = next(seg for seg in result.pages[0].segments if seg["status"] != "match")
+        assert segment["status"] == "needs_review"
+        assert segment["final_text"] in primary  # 主文の該当箇所を残す
+        assert "採用せず主文を残しました" in segment["reason"]
+        assert "ネルeリ角" in segment["reason"]  # 何を提案されたかは、人が確認できるよう示す
+        assert "画像から読み取れる" not in segment["reason"]  # LLMが付けた理由は、使わない
+        assert "ネルeリ角" not in result.markdown
+        assert "パネルの損傷" in result.markdown
+
+    def test_correction_that_only_changes_whitespace_of_a_candidate_is_adopted(self, tmp_path, monkeypatch):
+        """空白・改行の位置が違うだけの写し(候補と同じ内容)は、これまでどおり自動修正として採用する"""
+        _setup(monkeypatch, {0.0: "SAMPLE\n保持フレーム"}, glm=("SAMPLE 保持フレムー", True))
+        monkeypatch.setattr(ocr_pipeline, "correct_page_with_vision_llm", _fix_first_mismatch("保持  フレーム"))
+
+        result = ocr_pipeline.run_ocr_pipeline(tmp_path / "manual.pdf")
+
+        statuses = [seg["status"] for seg in result.pages[0].segments]
+        assert "auto_corrected" in statuses
+        assert "needs_review" not in statuses
+
+    def test_language_recheck_restores_primary_when_correction_picked_the_weaker_candidate(self, tmp_path, monkeypatch):
+        """
+        2026-10-08: 実機で、補正LLMが、正しく読めていた主文(「〜について」)を、弱い方の候補
+        (助詞が欠けた「〜ついて」)で上書きした。日本語として正しいかの再チェックが、主文のほうが正しいと判定したら、補正を取り消す。
+        """
+        _setup(monkeypatch, {0.0: "# 4.5【点検について】"}, glm=("# 4.5【点検ついて】", True))
+        monkeypatch.setattr(ocr_pipeline, "correct_page_with_vision_llm", _fix_first_mismatch("# 4.5【点検ついて】"))
+        received = []
+
+        def _veto(items, page_text, ollama_host, model=None, timeout_seconds=None):
+            received.extend(items)
+            return {
+                item.segment_id: RecheckVerdict(item.segment_id, False, BASIS_LANGUAGE, "「について」が正しい表記です")
+                for item in items
+            }
+
+        monkeypatch.setattr(ocr_pipeline, "recheck_corrections", _veto)
+
+        result = ocr_pipeline.run_ocr_pipeline(tmp_path / "manual.pdf")
+
+        segment = next(seg for seg in result.pages[0].segments if seg["status"] != "match")
+        assert segment["status"] == "needs_review"
+        assert "点検について" in segment["final_text"]
+        assert "補正案を取り消し" in segment["reason"] and "点検ついて" in segment["reason"]
+        assert "点検について" in result.markdown and "点検ついて" not in result.markdown
+        # 再チェックには、主文・補正後が、そのまま渡る
+        assert "点検について" in received[0].primary
+        assert "点検ついて" in received[0].chosen
+
+    def test_recheck_receives_context_around_the_correction(self, tmp_path, monkeypatch):
+        _setup(monkeypatch, {0.0: "前の文です。 R-1温度 2S.0 後の文です。"}, glm=("前の文です。 R-1温度 25.0 後の文です。", True))
+        monkeypatch.setattr(ocr_pipeline, "correct_page_with_vision_llm", _fix_first_mismatch("25.0"))
+        received = []
+        monkeypatch.setattr(
+            ocr_pipeline, "recheck_corrections",
+            lambda items, *a, **k: received.extend(items) or _keep_all_corrections(items, *a, **k),
+        )
+
+        ocr_pipeline.run_ocr_pipeline(tmp_path / "manual.pdf")
+
+        assert "前の文です。 R-1温度" in received[0].before
+        assert "後の文です。" in received[0].after
+
+    def test_text_layer_that_has_the_primary_wording_cancels_the_correction_without_review(self, tmp_path, monkeypatch):
+        """PDFのテキスト層に主文の表記がある(補正後には無い)なら、主文が正しいと確認できたので、要確認にもしない"""
+        layer = "4.5【点検について】定期的に点検を行い、結果を記録します。"
+        _setup(monkeypatch, {0.0: "# 4.5【点検について】"}, glm=("# 4.5【点検ついて】", True), page_texts=[layer, layer])
+        monkeypatch.setattr(ocr_pipeline, "recheck_corrections", correction_recheck.recheck_corrections)
+        monkeypatch.setattr(ocr_pipeline, "correct_page_with_vision_llm", _fix_first_mismatch("# 4.5【点検ついて】"))
+
+        result = ocr_pipeline.run_ocr_pipeline(tmp_path / "manual.pdf")
+
+        statuses = [seg["status"] for seg in result.pages[0].segments]
+        assert "needs_review" not in statuses and "auto_corrected" not in statuses
+        assert "点検について" in result.pages[0].final_text
+        cancelled = next(seg for seg in result.pages[0].segments if seg["reason"])
+        assert "PDFのテキスト層" in cancelled["reason"]
+
+    def test_text_layer_that_has_the_corrected_wording_confirms_the_correction(self, tmp_path, monkeypatch):
+        layer = "R-1温度 25.0 度で運転します。これはテキスト層の文字列です。"
+        _setup(monkeypatch, {0.0: "R-1温度 2S.0 度で運転します。"}, glm=("R-1温度 25.0 度で運転します。", True), page_texts=[layer, layer])
+        monkeypatch.setattr(ocr_pipeline, "recheck_corrections", correction_recheck.recheck_corrections)
+        monkeypatch.setattr(ocr_pipeline, "correct_page_with_vision_llm", _fix_first_mismatch("25.0"))
+
+        result = ocr_pipeline.run_ocr_pipeline(tmp_path / "manual.pdf")
+
+        corrected = next(seg for seg in result.pages[0].segments if seg["status"] == "auto_corrected")
+        assert corrected["final_text"] == "25.0"
+        # 補正後が、PDFのテキスト層にもあるなら、その確認の結果を、判定理由に残す
+        assert "PDFのテキスト層" in corrected["reason"]
+
+    def test_pages_without_a_text_layer_get_none(self, tmp_path, monkeypatch):
+        """スキャンしたPDF(テキスト層が無い・ほぼ空のページ)では、テキスト層との照合をしない(Noneを渡す)"""
+        _setup(monkeypatch, {0.0: "R-1温度 2S.0"}, glm=("R-1温度 25.0", True), page_texts=["", "　\n"])
+        monkeypatch.setattr(ocr_pipeline, "correct_page_with_vision_llm", _fix_first_mismatch("25.0"))
+        page_texts_seen = []
+        monkeypatch.setattr(
+            ocr_pipeline, "recheck_corrections",
+            lambda items, page_text, *a, **k: page_texts_seen.append(page_text) or _keep_all_corrections(items, page_text, *a, **k),
+        )
+
+        ocr_pipeline.run_ocr_pipeline(tmp_path / "manual.pdf")
+
+        assert page_texts_seen == [None, None]
+
+    def test_correction_that_only_changes_whitespace_is_not_rechecked(self, tmp_path, monkeypatch):
+        """主文と同じ内容(空白・改行の違いだけ)への補正は、書き換えではないため、再チェックしない"""
+        _setup(monkeypatch, {0.0: "SAMPLE\n保持フレーム"}, glm=("SAMPLE 保持フレムー", True))
+        monkeypatch.setattr(ocr_pipeline, "correct_page_with_vision_llm", _fix_first_mismatch("保持  フレーム"))
+        calls = []
+        monkeypatch.setattr(ocr_pipeline, "recheck_corrections", lambda items, *a, **k: calls.append(items) or {})
+
+        ocr_pipeline.run_ocr_pipeline(tmp_path / "manual.pdf")
+
+        assert calls == []
 
     def test_still_uncertain_falls_back_to_primary_text_not_llm_guess(self, tmp_path, monkeypatch):
         """still_uncertain=Trueの場合、LLMの提案は採用せず主文(vision LLM)を暫定採用する"""

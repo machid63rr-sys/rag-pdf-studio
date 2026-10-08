@@ -33,11 +33,13 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import List, Tuple
+from typing import List, Sequence, Tuple
 
 _LEADING_MARKDOWN_MARKS = re.compile(r'^[#>*_\-\s]+')
 _WHITESPACE = re.compile(r'\s+')
 _WORD_PATTERN = re.compile(r'\S+')
+# 目次・表の点線(「…………」。NFKCで「...」の連なりになる)。内容を持たず、長さも読み取りのたびに変わるため、類似度の比較から外す
+_LEADER_DOTS = re.compile(r'\.{2,}')
 
 
 @dataclass(frozen=True)
@@ -64,6 +66,26 @@ def normalize_for_diff(text: str) -> str:
     normalized = _LEADING_MARKDOWN_MARKS.sub('', normalized)
     normalized = normalized.replace('|', ' ')
     return _WHITESPACE.sub(' ', normalized).strip()
+
+
+def candidate_similarity(text: str, candidates: Sequence[str]) -> float:
+    """
+    textが、candidatesのうち最も近いものにどれだけ似ているか(0.0〜1.0。1.0は、正規化すると同じ)。
+    補正LLMの出力が、主文・比較候補を土台にした修正なのか、候補と無関係な文字列(文字化け・幻覚)なのかを
+    見分けるために使う(ocr_pipeline.MIN_CORRECTION_SIMILARITY)。
+
+    比較は、normalize_for_diffに加えて、空白・改行と、点線(「…………」)を全て除いた文字列で行う。LLMは、候補を写すときに
+    改行・空白の位置を変えることがあり、それを違いとして数えないため。点線は、内容を持たないのに、候補と文字化けの
+    両方に長く入っていると、類似度を押し上げてしまう(実機の資料の表は、点線で項目と内容をつないでいる)。
+    """
+    def squash(value: str) -> str:
+        return _WHITESPACE.sub('', _LEADER_DOTS.sub('', normalize_for_diff(value)))
+
+    target = squash(text)
+    return max(
+        (SequenceMatcher(None, target, squash(candidate), autojunk=False).ratio() for candidate in candidates),
+        default=0.0,
+    )
 
 
 def _tokenize_with_spans(text: str) -> List[Tuple[str, int, int]]:
