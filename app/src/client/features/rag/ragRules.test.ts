@@ -90,8 +90,8 @@ describe('addEquipmentNames', () => {
   });
 
   it('空・区切りだけは断る', () => {
-    expect(addEquipmentNames([], '   ')).toEqual({ ok: false, message: '機器名を入力してください。' });
-    expect(addEquipmentNames([], ',，、')).toEqual({ ok: false, message: '機器名を入力してください。' });
+    expect(addEquipmentNames([], '   ')).toEqual({ ok: false, message: 'タグ名を入力してください。' });
+    expect(addEquipmentNames([], ',，、')).toEqual({ ok: false, message: 'タグ名を入力してください。' });
   });
 
   it('既存と重複する名前は断る', () => {
@@ -118,8 +118,8 @@ describe('addEquipmentNames', () => {
 });
 
 describe('describeEquipmentNames', () => {
-  it('空なら「全機器共通」、あれば読点でつなぐ', () => {
-    expect(describeEquipmentNames([])).toBe('全機器共通');
+  it('空なら「共通(タグなし)」、あれば読点でつなぐ', () => {
+    expect(describeEquipmentNames([])).toBe('共通(タグなし)');
     expect(describeEquipmentNames(['R-1', 'R-2'])).toBe('R-1、R-2');
   });
 });

@@ -96,13 +96,13 @@ class ManualRetriever:
         """
         query_textに関連するマニュアルチャンクをコサイン距離の近い順に検索する
 
-        equipment_name指定時は、その機器名を持つマニュアルと、機器名が1件も登録されて
-        いない汎用マニュアルの両方を検索対象にする。1つのマニュアルに複数の機器名が
+        equipment_name指定時は、そのタグ名を持つマニュアルと、タグ名が1件も登録されて
+        いない汎用マニュアルの両方を検索対象にする。1つのマニュアルに複数のタグ名が
         登録されていてよく、そのいずれかが一致すれば対象とする。
 
         Args:
             query_text: 検索クエリ（空文字・空白のみは不可）
-            equipment_name: 対象の個別機器名（例: "ESP-1"）。Noneの場合は絞り込まない
+            equipment_name: 対象の個別タグ名（例: "ESP-1"）。Noneの場合は絞り込まない
             top_k: 取得件数上限（1以上）
 
         Returns:
@@ -142,4 +142,58 @@ class ManualRetriever:
             cursor.execute(
                 query, (vector_literal, equipment_name, equipment_name, vector_literal, top_k)
             )
+            return cursor.fetchall()
+
+    def search_tagged(
+        self,
+        query_text: str,
+        equipment_names: List[str],
+        top_k: int = 5
+    ) -> List[Dict]:
+        """
+        指定のタグ名のいずれかが付いたマニュアルから、文書ごとに質問に最も近い1チャンクを検索する
+
+        search()と違い、タグ名が1件も付いていない汎用マニュアルは対象にしない
+        （「そのタグの資料」を探す用途のため）。1文書から1チャンクだけにするのは、タグ名だけの質問では、
+        1つの文書の複数チャンクより、そのタグが付いた文書を一通り挙げる方が役に立つため。
+        類似度の足切りはしない（呼び出し側が、タグ名が付いていること自体を根拠にする）。
+
+        Args:
+            query_text: 検索クエリ（空文字・空白のみは不可）
+            equipment_names: 対象のタグ名（1件以上）。いずれかが付いたマニュアルを対象にする
+            top_k: 取得件数（文書数）の上限（1以上）
+
+        Returns:
+            search()と同じ形式のリスト。類似度降順、1文書につき1件。該当する文書が無ければ空リスト
+        """
+        if not query_text.strip():
+            raise ValueError("検索クエリが空です")
+        if top_k < 1:
+            raise ValueError(f"top_kは1以上を指定してください: {top_k}")
+        if not equipment_names:
+            raise ValueError("タグ名を1件以上指定してください")
+
+        vector_literal = to_pgvector_literal(self.embed(query_text))
+
+        query = """
+            SELECT content, document_title, document_id, similarity
+            FROM (
+                SELECT DISTINCT ON (d.id)
+                    c.content,
+                    d.title AS document_title,
+                    d.id::text AS document_id,
+                    1 - (c.embedding <=> %s::vector) AS similarity
+                FROM m_manual_chunk c
+                JOIN m_manual_document d ON d.id = c.document_id
+                WHERE EXISTS (
+                    SELECT 1 FROM r_manual_document_equipment e
+                    WHERE e.document_id = d.id AND e.equipment_name = ANY(%s)
+                )
+                ORDER BY d.id, c.embedding <=> %s::vector
+            ) best_chunk_per_document
+            ORDER BY similarity DESC
+            LIMIT %s
+        """
+        with self.db.get_cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(query, (vector_literal, list(equipment_names), vector_literal, top_k))
             return cursor.fetchall()

@@ -115,7 +115,7 @@ describe('② OCR', () => {
 });
 
 describe('③ RAG', () => {
-  it('registerDocumentは、Markdown・題名・機器名(複数)・原本PDFをmultipartで送る', async () => {
+  it('registerDocumentは、Markdown・題名・タグ名(複数)・原本PDFをmultipartで送る', async () => {
     const calls = mockFetch(() => jsonResponse(201, { id: 'doc1' }));
 
     await registerDocument({
@@ -133,7 +133,7 @@ describe('③ RAG', () => {
     expect((form.get('pdf_file') as File).name).toBe('R-1.pdf');
   });
 
-  it('題名が空・機器名なし・PDFなしなら、その項目を送らない', async () => {
+  it('題名が空・タグ名なし・PDFなしなら、その項目を送らない', async () => {
     const calls = mockFetch(() => jsonResponse(201, {}));
 
     await registerDocument({ markdown: '本文', fileName: 'a.md', title: '  ', equipmentNames: [] });
@@ -144,7 +144,7 @@ describe('③ RAG', () => {
     expect(form.has('pdf_file')).toBe(false);
   });
 
-  it('searchManualsは、機器名が空なら絞り込みを送らず、top_kを送る', async () => {
+  it('searchManualsは、タグ名が空なら絞り込みを送らず、top_kを送る', async () => {
     const calls = mockFetch(() => jsonResponse(200, []));
 
     await searchManuals({ query: 'ポンプ', equipmentName: '', topK: 10 });
@@ -155,7 +155,7 @@ describe('③ RAG', () => {
     expect(calls[0]?.init?.method).toBe('POST');
   });
 
-  it('listEquipmentNamesは、機器名の文字列の配列にする', async () => {
+  it('listEquipmentNamesは、タグ名の文字列の配列にする', async () => {
     mockFetch(() => jsonResponse(200, [{ equipment_name: 'AHU-1' }, { equipment_name: 'ESP-1' }]));
 
     expect(await listEquipmentNames()).toEqual(['AHU-1', 'ESP-1']);

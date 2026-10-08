@@ -240,7 +240,7 @@ def ingest_manual_text(
     """
     テキストをチャンク分割→埋め込み→m_manual_document/m_manual_chunkへ格納する。
 
-    equipment_namesは対象機器名(複数可、空なら機器名未設定の汎用マニュアル扱い)。
+    equipment_namesは対象タグ名(複数可、空ならタグ名未設定の汎用マニュアル扱い)。
     同一source_file_nameの既存documentがあれば削除してから作り直す
     （配下chunkはON DELETE CASCADEで自動削除、部分更新はしない）。
 

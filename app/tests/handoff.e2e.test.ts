@@ -99,7 +99,7 @@ describe('② → ③ RAG登録への受け渡し', () => {
     expect(view.dialogs).toEqual([]);
     await stack.screenshot(view.page, 'handoff-1-rag-prefilled');
 
-    // 機器名を付けて登録する。偽サーバが受け取った内容が、②の結果と、アップロードした原本PDFそのもの
+    // タグ名を付けて登録する。偽サーバが受け取った内容が、②の結果と、アップロードした原本PDFそのもの
     await view.page.type('#rag-equipment-input', 'R-1,');
     await view.page.click('#rag-register-submit');
     await view.page.waitForSelector('.rag-success');

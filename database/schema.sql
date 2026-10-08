@@ -21,9 +21,11 @@ CREATE TABLE m_manual_document (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- マニュアル文書↔個別機器名（例: AHU-1, ESP-1）の多対多中間テーブル。
--- 1マニュアルが複数機器に該当してよい。行が1件も無いマニュアルは機器名未設定の
--- 汎用マニュアル扱い（機器名で絞り込んだ検索でも対象に含める）。
+-- マニュアル文書↔タグ名（例: AHU-1, ESP-1）の多対多中間テーブル。
+-- 1マニュアルが複数のタグ名を持ってよい。行が1件も無いマニュアルはタグ名未設定の
+-- 汎用マニュアル扱い（タグ名で絞り込んだ検索でも対象に含める）。
+-- 列名のequipment_nameは、画面・ドキュメントで「タグ名」と呼ぶもの（元は「機器名」。名前だけの変更で
+-- 稼働中のDBの移行とAPIの互換が壊れるのを避けるため、識別子はそのままにしている）。
 CREATE TABLE r_manual_document_equipment (
     document_id UUID NOT NULL REFERENCES m_manual_document(id) ON DELETE CASCADE,
     equipment_name VARCHAR(255) NOT NULL,
@@ -90,7 +92,7 @@ CREATE INDEX idx_manual_ocr_draft_created_at ON t_manual_ocr_draft (created_at D
 -- チャットの会話。認証が無いため、会話は、この画面を使う全員で共有される
 CREATE TABLE t_chat_session (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    -- 会話を始めるときに選んだ機器名。NULLは絞り込まない（質問文に機器名があれば、そちらを優先して絞る）
+    -- 会話を始めるときに選んだタグ名。NULLは絞り込まない（質問文にタグ名があれば、そちらを優先して絞る）
     equipment_name VARCHAR(255),
     -- 履歴一覧に出す題名（最初の質問の先頭。要約はしない）
     title VARCHAR(255),

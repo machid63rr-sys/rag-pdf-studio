@@ -30,10 +30,10 @@ class SearchRequest(BaseModel):
         max_length=MAX_QUERY_LENGTH,
         description="探したい内容を、普通の文章で入力する（例: ポンプの異常振動の原因と対策は？）",
     )
-    # 機器名を指定すると、その機器名のマニュアルと、機器名未設定の汎用マニュアルに絞る
+    # タグ名を指定すると、そのタグ名のマニュアルと、タグ名未設定の汎用マニュアルに絞る
     equipment_name: Optional[str] = Field(
         default=None,
-        description="機器名で絞り込む場合のみ指定（例: ESP-1）。絞り込まないときは null にするか、この行ごと削除する",
+        description="タグ名で絞り込む場合のみ指定（例: ESP-1）。絞り込まないときは null にするか、この行ごと削除する",
     )
     top_k: int = Field(default=5, ge=1, le=MAX_TOP_K, description="返す件数（1〜20）")
 

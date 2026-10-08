@@ -50,9 +50,9 @@ describe('会話の表示', () => {
     expect(sessionTitle({ title: '  ' })).toBe('(無題のチャット)');
   });
 
-  it('機器名で絞り込んでいない会話は「全機器」と表示する', () => {
+  it('タグ名で絞り込んでいない会話は「絞り込みなし」と表示する', () => {
     expect(describeSessionEquipment('ESP-1')).toBe('ESP-1');
-    expect(describeSessionEquipment(null)).toBe('全機器');
+    expect(describeSessionEquipment(null)).toBe('絞り込みなし');
   });
 });
 

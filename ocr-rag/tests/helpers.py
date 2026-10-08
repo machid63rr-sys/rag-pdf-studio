@@ -50,6 +50,16 @@ def insert_manual_chunk(
     return document_id
 
 
+def insert_extra_chunk(db, document_id, chunk_index: int, content: str, embedding: list) -> None:
+    """既存のマニュアル文書に、チャンクを1件足す（insert_manual_chunkは、chunk_index 0の1件だけを作る）"""
+    with db.get_cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO m_manual_chunk (document_id, chunk_index, content, embedding) "
+            "VALUES (%s, %s, %s, %s::vector)",
+            (str(document_id), chunk_index, content, to_pgvector_literal(embedding)),
+        )
+
+
 class SyncExecutor(Executor):
     """submitされた処理をその場で実行する実行器（スレッドの待ち合わせをせずに、ジョブをテストするため）"""
 

@@ -15,7 +15,7 @@ interface RegisterPanelProps {
   // 登録済みの文書(同じ登録名の確認に使う)と、その取得の失敗理由
   readonly documents: readonly DocumentSummary[];
   readonly documentsError: string | null;
-  // 登録済みの機器名(入力の候補)
+  // 登録済みのタグ名(入力の候補)
   readonly equipmentCandidates: readonly string[];
   // ② から渡された内容(無ければ null)。id が変わると、フォームに取り込む
   readonly incoming: RagHandoff | null;
@@ -33,7 +33,7 @@ interface AttachedPdf {
 type PdfFetch = { readonly kind: 'idle' } | { readonly kind: 'loading' } | { readonly kind: 'failed'; readonly message: string };
 
 /**
- * 登録フォーム。Markdown(ファイル・貼り付け・②からの受け取り)を、機器名・原本PDFと一緒にRAGへ登録する。
+ * 登録フォーム。Markdown(ファイル・貼り付け・②からの受け取り)を、タグ名・原本PDFと一緒にRAGへ登録する。
  * 同じ登録名で登録し直すと、既存の文書が置き換わる(原本PDFは、新しく付けなければ引き継がれる)。
  */
 const RegisterPanel: React.FC<RegisterPanelProps> = ({ unavailable, documents, documentsError, equipmentCandidates, incoming, onRegistered, onShowBrowse }) => {
@@ -187,7 +187,7 @@ const RegisterPanel: React.FC<RegisterPanelProps> = ({ unavailable, documents, d
       validateRegistrationName(name) ??
       (markdown.trim() === '' ? 'Markdown本文が空です。ファイルを読み込むか、本文を貼り付けてください。' : null) ??
       (new Blob([markdown]).size > MAX_UPLOAD_BYTES ? 'Markdown本文が大きすぎます(上限 100MB)。' : null) ??
-      (pendingEquipment.trim() !== '' ? '入力中の機器名が追加されていません。「追加」を押すか、入力を消してください。' : null) ??
+      (pendingEquipment.trim() !== '' ? '入力中のタグ名が追加されていません。「追加」を押すか、入力を消してください。' : null) ??
       validateTitle(title);
     if (problem !== null) {
       setFormError(problem);
@@ -234,7 +234,7 @@ const RegisterPanel: React.FC<RegisterPanelProps> = ({ unavailable, documents, d
           <ul className="rag-success-details">
             <li>登録名: {result.source_file_name}</li>
             <li>チャンク数: {result.chunk_count}</li>
-            <li>機器名: {describeEquipmentNames(result.equipment_names)}</li>
+            <li>タグ名: {describeEquipmentNames(result.equipment_names)}</li>
             <li>原本PDF: {result.has_pdf ? 'あり' : 'なし'}</li>
           </ul>
           <button type="button" className="button" onClick={onShowBrowse}>
@@ -369,7 +369,7 @@ const RegisterPanel: React.FC<RegisterPanelProps> = ({ unavailable, documents, d
         </div>
 
         <div className="rag-field">
-          <label htmlFor="rag-equipment-input">機器名(複数可)</label>
+          <label htmlFor="rag-equipment-input">タグ名登録(複数可)</label>
           <EquipmentNameInput
             id="rag-equipment-input"
             names={equipmentNames}

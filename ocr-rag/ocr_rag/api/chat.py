@@ -1,7 +1,7 @@
 """
 チャットAPI（機能④: 登録したマニュアルへの質問）
 
-- POST   /chat/sessions                       : 会話を作る（機器名の絞り込みは任意）
+- POST   /chat/sessions                       : 会話を作る（タグ名の絞り込みは任意）
 - GET    /chat/sessions                       : 会話の一覧（新しい順）
 - DELETE /chat/sessions/{id}                  : 会話を削除する（メッセージも消える）
 - GET    /chat/sessions/{id}/messages         : 会話のメッセージ全件
@@ -39,7 +39,7 @@ class CreateSessionRequest(BaseModel):
     equipment_name: Optional[str] = Field(
         default=None,
         max_length=MAX_NAME_LENGTH,
-        description="機器名で絞り込む場合のみ指定（例: ESP-1）。絞り込まないときは null",
+        description="タグ名で絞り込む場合のみ指定（例: ESP-1）。絞り込まないときは null",
     )
 
     @field_validator("equipment_name")

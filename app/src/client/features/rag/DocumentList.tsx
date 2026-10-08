@@ -11,7 +11,7 @@ interface DocumentListProps {
   readonly onReload: () => void;
 }
 
-/** 登録済みの文書の一覧(題名・機器名・チャンク数・原本PDF・登録日時) */
+/** 登録済みの文書の一覧(題名・タグ名・チャンク数・原本PDF・登録日時) */
 const DocumentList: React.FC<DocumentListProps> = ({ documents, loading, error, unavailable, onReload }) => (
   <section className="rag-documents" aria-labelledby="rag-documents-heading">
     <div className="rag-section-header">
@@ -33,7 +33,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, loading, error, 
         <thead>
           <tr>
             <th scope="col">題名</th>
-            <th scope="col">機器名</th>
+            <th scope="col">タグ名</th>
             <th scope="col">チャンク数</th>
             <th scope="col">原本PDF</th>
             <th scope="col">登録日時</th>
@@ -48,7 +48,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ documents, loading, error, 
               </th>
               <td>
                 {document.equipment_names.length === 0 ? (
-                  <span className="hint">全機器共通</span>
+                  <span className="hint">共通(タグなし)</span>
                 ) : (
                   <ul className="rag-chips rag-chips-static">
                     {document.equipment_names.map((name) => (

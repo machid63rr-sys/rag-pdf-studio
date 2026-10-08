@@ -13,7 +13,7 @@
 -- チャットの会話。認証が無いため、会話は、この画面を使う全員で共有される
 CREATE TABLE IF NOT EXISTS t_chat_session (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    -- 会話を始めるときに選んだ機器名。NULLは絞り込まない（質問文に機器名があれば、そちらを優先して絞る）
+    -- 会話を始めるときに選んだタグ名。NULLは絞り込まない（質問文にタグ名があれば、そちらを優先して絞る）
     equipment_name VARCHAR(255),
     -- 履歴一覧に出す題名（最初の質問の先頭。要約はしない）
     title VARCHAR(255),

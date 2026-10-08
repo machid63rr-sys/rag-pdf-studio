@@ -29,7 +29,7 @@ const ChatFeature: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
-  // 新しい会話の、機器名の絞り込み(空=すべて)
+  // 新しい会話の、タグ名の絞り込み(空=すべて)
   const [newEquipment, setNewEquipment] = useState('');
   const [question, setQuestion] = useState('');
   const [inputError, setInputError] = useState<string | null>(null);
@@ -144,7 +144,7 @@ const ChatFeature: React.FC = () => {
     setNewEquipment('');
     setError(null);
     setInputError(null);
-    // ③で登録した機器名を、絞り込みの候補に反映する
+    // ③で登録したタグ名を、絞り込みの候補に反映する
     reloadRegistered();
   };
 
@@ -293,7 +293,7 @@ const ChatFeature: React.FC = () => {
             {isNewChat && (
               <div className="chat-new">
                 <div className="chat-new-options">
-                  <label htmlFor="chat-equipment">機器名で絞り込む(任意)</label>
+                  <label htmlFor="chat-equipment">タグ名で絞り込む(任意)</label>
                   <select id="chat-equipment" className="text-input select-input" value={newEquipment} disabled={inputDisabled} onChange={(event) => setNewEquipment(event.target.value)}>
                     <option value="">すべて</option>
                     {registered.equipmentNames.map((name) => (
@@ -302,7 +302,7 @@ const ChatFeature: React.FC = () => {
                       </option>
                     ))}
                   </select>
-                  <p className="field-hint">絞り込むと、その機器名の資料と、全機器共通の資料だけを根拠にします。質問に機器名が書かれていれば、それを優先します。</p>
+                  <p className="field-hint">絞り込むと、そのタグ名の資料と、共通(タグなし)の資料だけを根拠にします。質問にタグ名が書かれていれば、それを優先します。</p>
                 </div>
                 <p className="chat-empty">質問を入力して、チャットを始めてください。</p>
               </div>

@@ -8,7 +8,7 @@ interface EquipmentNameInputProps {
   // 入力欄に入力中で、まだ追加されていない文字列(登録するときに、追加し忘れを確認するため、親が持つ)
   readonly pending: string;
   readonly onPendingChange: (pending: string) => void;
-  // 既存の機器名(入力の候補として提示する)
+  // 既存のタグ名(入力の候補として提示する)
   readonly candidates: readonly string[];
   readonly disabled: boolean;
 }
@@ -16,7 +16,7 @@ interface EquipmentNameInputProps {
 const SEPARATOR = /[,，、]/;
 
 /**
- * 機器名の入力。Enterまたはカンマで追加し、チップの「×」で外す。既存の機器名は、候補として提示する。
+ * タグ名の入力。Enterまたはカンマで追加し、チップの「×」で外す。既存のタグ名は、候補として提示する。
  * 追加できない入力(空・長すぎる・重複)は、黙って捨てず、理由を表示する。
  */
 const EquipmentNameInput: React.FC<EquipmentNameInputProps> = ({ id, names, onNamesChange, pending, onPendingChange, candidates, disabled }) => {
@@ -41,7 +41,7 @@ const EquipmentNameInput: React.FC<EquipmentNameInputProps> = ({ id, names, onNa
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const value = event.target.value;
-    // 日本語入力の変換中は、途中の文字を機器名として扱わない
+    // 日本語入力の変換中は、途中の文字をタグ名として扱わない
     const composing = (event.nativeEvent as InputEvent).isComposing;
     if (!composing && SEPARATOR.test(value)) {
       // カンマまでを追加し、その後ろを入力中として残す(「A,B,」の貼り付けにも対応)
@@ -64,7 +64,7 @@ const EquipmentNameInput: React.FC<EquipmentNameInputProps> = ({ id, names, onNa
   return (
     <div className="rag-equipment">
       {names.length > 0 && (
-        <ul className="rag-chips" aria-label="追加した機器名">
+        <ul className="rag-chips" aria-label="追加したタグ名">
           {names.map((name) => (
             <li key={name} className="rag-chip">
               {name}
@@ -109,7 +109,7 @@ const EquipmentNameInput: React.FC<EquipmentNameInputProps> = ({ id, names, onNa
           {message}
         </p>
       )}
-      {names.length === 0 && <p className="field-hint">機器名を付けないと、全機器共通の資料として扱います(どの機器で絞り込んだ検索でも対象になります)。</p>}
+      {names.length === 0 && <p className="field-hint">タグ名を付けないと、共通(タグなし)の資料として扱います(どのタグ名で絞り込んだ検索でも対象になります)。</p>}
     </div>
   );
 };

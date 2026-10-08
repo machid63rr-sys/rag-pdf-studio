@@ -73,7 +73,7 @@ export interface ManualReference {
 
 export interface ChatSession {
   readonly session_id: string;
-  // 会話の最初に絞り込んだ機器名。絞り込まなかったときは null(全機器)
+  // 会話の最初に絞り込んだタグ名。絞り込まなかったときは null(絞り込みなし)
   readonly equipment_name: string | null;
   // 最初の質問の先頭。質問がまだ無い会話は null
   readonly title: string | null;
@@ -253,7 +253,7 @@ export interface RegisterDocumentInput {
   readonly fileName: string;
   // 表示名。省略すると、ファイル名(拡張子なし)になる
   readonly title?: string;
-  // 対象の機器名。空なら、全機器共通の資料として扱う
+  // 対象のタグ名。空なら、共通(タグなし)の資料として扱う
   readonly equipmentNames: readonly string[];
   // 原本PDF(任意)
   readonly pdf?: { readonly blob: Blob; readonly fileName: string };
@@ -288,7 +288,7 @@ export const documentPdfUrl = (id: string): string => `${BASE}/documents/${encod
 
 export interface SearchInput {
   readonly query: string;
-  // 指定すると、その機器名の資料と、機器名の無い(全機器共通の)資料に絞る
+  // 指定すると、そのタグ名の資料と、タグ名の無い(共通の)資料に絞る
   readonly equipmentName?: string;
   readonly topK?: number;
 }
@@ -306,7 +306,7 @@ export function searchManuals(input: SearchInput, signal?: AbortSignal): Promise
 
 // ---- ④ AIチャット ----
 
-/** 会話を作る。equipmentName を指定すると、その機器名の資料と、全機器共通の資料だけを根拠にする */
+/** 会話を作る。equipmentName を指定すると、そのタグ名の資料と、共通(タグなし)の資料だけを根拠にする */
 export function createChatSession(equipmentName: string | null, signal?: AbortSignal): Promise<Pick<ChatSession, 'session_id' | 'equipment_name' | 'created_at'>> {
   return callJson<Pick<ChatSession, 'session_id' | 'equipment_name' | 'created_at'>>('/chat/sessions', { ...jsonRequest('POST', { equipment_name: equipmentName }), ...(signal === undefined ? {} : { signal }) });
 }

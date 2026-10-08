@@ -140,7 +140,7 @@ describe('質問と回答', () => {
     // 会話が作られ、履歴に、最初の質問が題名として出る
     await view.page.waitForSelector('.chat-session');
     expect(await textOf('.chat-session-title')).toBe('異常な振動の原因は?');
-    expect(await textOf('.chat-session-meta')).toContain('全機器');
+    expect(await textOf('.chat-session-meta')).toContain('絞り込みなし');
     expect(stack.rag.lastCreateSessionBody).toEqual({ equipment_name: null });
     expect(stack.rag.chatQuestions).toEqual([{ sessionId: stack.rag.chatSessions[0]?.session_id, question: '異常な振動の原因は?' }]);
     expect(unexpectedConsoleErrors()).toEqual([]);
@@ -298,8 +298,8 @@ describe('参照マニュアル', () => {
   });
 });
 
-describe('機器名の絞り込み', () => {
-  it('新しい会話の最初の質問のときだけ、機器名で絞り込める。選んだ機器名で会話が作られ、履歴に出る', async () => {
+describe('タグ名の絞り込み', () => {
+  it('新しい会話の最初の質問のときだけ、タグ名で絞り込める。選んだタグ名で会話が作られ、履歴に出る', async () => {
     stack.rag.addDocument({ title: 'ポンプ', markdown: '# ポンプ\n\n説明', equipment_names: ['ESP-1'] });
     stack.rag.addDocument({ title: 'チラー', markdown: '# チラー\n\n説明', equipment_names: ['R-1'] });
     await openChat();

@@ -12,7 +12,7 @@ export const LOW_SIMILARITY_THRESHOLD = 0.5;
 
 // アップロードの上限(ocr-ragのMAX_UPLOAD_BYTESの既定と同じ)
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
-// 登録名・題名・機器名の長さの上限(DBのVARCHAR(255)と同じ)
+// 登録名・題名・タグ名の長さの上限(DBのVARCHAR(255)と同じ)
 export const MAX_NAME_LENGTH = 255;
 export const MAX_QUERY_LENGTH = 2000;
 
@@ -73,25 +73,25 @@ export function findExistingDocument(documents: readonly DocumentSummary[], regi
   return documents.find((document) => document.source_file_name === registrationName) ?? null;
 }
 
-// ---- 機器名 ----
+// ---- タグ名 ----
 
 export type EquipmentNameResult = { readonly ok: true; readonly names: string[] } | { readonly ok: false; readonly message: string };
 
 const SEPARATOR = /[,，、]/;
 
 /**
- * 入力された文字列(カンマ区切りで、複数も可)を、機器名の一覧に追加する。
+ * 入力された文字列(カンマ区切りで、複数も可)を、タグ名の一覧に追加する。
  * 空・255文字超・重複が1つでもあれば、1つも追加せず、理由を返す(一部だけ黙って追加しない)。
  */
 export function addEquipmentNames(current: readonly string[], input: string): EquipmentNameResult {
   const entered = input.split(SEPARATOR).map((part) => part.trim()).filter((part) => part !== '');
   if (entered.length === 0) {
-    return { ok: false, message: '機器名を入力してください。' };
+    return { ok: false, message: 'タグ名を入力してください。' };
   }
   const names = [...current];
   for (const name of entered) {
     if (name.length > MAX_NAME_LENGTH) {
-      return { ok: false, message: `機器名が長すぎます(${MAX_NAME_LENGTH}文字以内): ${name.slice(0, 20)}…` };
+      return { ok: false, message: `タグ名が長すぎます(${MAX_NAME_LENGTH}文字以内): ${name.slice(0, 20)}…` };
     }
     if (names.includes(name)) {
       return { ok: false, message: `「${name}」は既に追加されています。` };
@@ -101,8 +101,8 @@ export function addEquipmentNames(current: readonly string[], input: string): Eq
   return { ok: true, names };
 }
 
-/** 機器名の一覧を、画面に出す文言にする(空なら、全機器共通の資料) */
-export const describeEquipmentNames = (names: readonly string[]): string => (names.length === 0 ? '全機器共通' : names.join('、'));
+/** タグ名の一覧を、画面に出す文言にする(空なら、共通(タグなし)の資料) */
+export const describeEquipmentNames = (names: readonly string[]): string => (names.length === 0 ? '共通(タグなし)' : names.join('、'));
 
 // ---- ファイル ----
 

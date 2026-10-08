@@ -3,7 +3,7 @@ import { listDocuments, listEquipmentNames, type DocumentSummary } from '../../r
 import { errorMessage } from './ragRules';
 
 export interface RegisteredData {
-  // 登録済みの文書(新しい順)と、登録済みの機器名(絞り込みの候補)
+  // 登録済みの文書(新しい順)と、登録済みのタグ名(絞り込みの候補)
   readonly documents: readonly DocumentSummary[];
   readonly equipmentNames: readonly string[];
   readonly loading: boolean;
@@ -14,7 +14,7 @@ export interface RegisteredData {
 }
 
 /**
- * 登録済みの文書と機器名を取得する。enabled が false の間(OCR・RAGサービスが使えない間)は、
+ * 登録済みの文書とタグ名を取得する。enabled が false の間(OCR・RAGサービスが使えない間)は、
  * 取得しない。使えるようになったとき(enabled が true になったとき)と、reload() のときに取得する。
  */
 export function useRegisteredDocuments(enabled: boolean): RegisteredData {

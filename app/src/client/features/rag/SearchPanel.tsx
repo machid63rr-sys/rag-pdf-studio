@@ -8,7 +8,7 @@ import {
 
 interface SearchPanelProps {
   readonly unavailable: boolean;
-  // 機器名の絞り込みの候補
+  // タグ名の絞り込みの候補
   readonly equipmentNames: readonly string[];
   // 結果の文書に、原本PDFがあるか(リンクを出すか)の判定に使う
   readonly documents: readonly DocumentSummary[];
@@ -100,7 +100,7 @@ const SearchPanel: React.FC<SearchPanelProps> = ({ unavailable, equipmentNames, 
           />
         </div>
         <div className="rag-field">
-          <label htmlFor="rag-search-equipment">機器名で絞り込む</label>
+          <label htmlFor="rag-search-equipment">タグ名で絞り込む</label>
           <select id="rag-search-equipment" className="text-input select-input" value={equipment} disabled={unavailable} onChange={(event) => setEquipment(event.target.value)}>
             <option value="">すべて</option>
             {equipmentNames.map((name) => (
@@ -139,7 +139,7 @@ const SearchPanel: React.FC<SearchPanelProps> = ({ unavailable, equipmentNames, 
         )}
         {state.kind === 'done' && (
           <>
-            {state.results.length === 0 && <p className="notice notice-info rag-no-results">「{state.query}」に該当する登録内容は見つかりませんでした。文書が登録されているか、機器名の絞り込みを確認してください。</p>}
+            {state.results.length === 0 && <p className="notice notice-info rag-no-results">「{state.query}」に該当する登録内容は見つかりませんでした。文書が登録されているか、タグ名の絞り込みを確認してください。</p>}
             {allLowRelevance(state.results) && (
               <p role="status" className="notice notice-warning rag-all-low">
                 該当する記載が見つからない可能性があります。上位の結果も、類似度が{LOW_SIMILARITY_THRESHOLD}未満です。

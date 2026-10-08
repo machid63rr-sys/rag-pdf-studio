@@ -109,7 +109,7 @@ const POST_DOCUMENTS = (): number => stack.rag.requests.filter((r) => r.method =
 const POST_SEARCH = (): number => stack.rag.requests.filter((r) => r.method === 'POST' && r.path === '/search').length;
 
 describe('登録', () => {
-  it('Markdownファイルを選び、題名・機器名(複数)・原本PDFをつけて登録できる', async () => {
+  it('Markdownファイルを選び、題名・タグ名(複数)・原本PDFをつけて登録できる', async () => {
     await openRag();
     await uploadTo('#rag-markdown-file', makeFile('AHU-1.md', SAMPLE_MD));
     await view.page.waitForFunction(() => (document.querySelector('#rag-markdown') as HTMLTextAreaElement).value !== '');
@@ -126,7 +126,7 @@ describe('登録', () => {
     await waitForText('.rag-pdf-row', 'AHU-1.pdf');
     await stack.screenshot(view.page, 'rag-register-filled');
 
-    // 追加した機器名が、チップで並ぶ
+    // 追加したタグ名が、チップで並ぶ
     expect(await view.page.$$eval('.rag-equipment .rag-chip', (chips) => chips.map((chip) => chip.textContent?.replace('×', '').trim()))).toEqual(['AHU-1', 'AHU-2']);
 
     await view.page.click('#rag-register-submit');
@@ -137,7 +137,7 @@ describe('登録', () => {
     expect(success).toContain('「空調機 AHU-1」を登録しました');
     expect(success).toContain('登録名: AHU-1.md');
     expect(success).toContain('チャンク数: 2');
-    expect(success).toContain('機器名: AHU-1、AHU-2');
+    expect(success).toContain('タグ名: AHU-1、AHU-2');
     expect(success).toContain('原本PDF: あり');
 
     // 偽サーバが受け取った内容
@@ -165,7 +165,7 @@ describe('登録', () => {
     expect(unexpectedConsoleErrors()).toEqual([]);
   });
 
-  it('貼り付けで登録できる。登録名に拡張子が無ければ .md を補い、機器名なしは「全機器共通」', async () => {
+  it('貼り付けで登録できる。登録名に拡張子が無ければ .md を補い、タグ名なしは「共通(タグなし)」', async () => {
     await openRag();
     await setMarkdown('# 貼り付けた資料\n\n本文です。');
     await view.page.type('#rag-registration-name', 'メモ');
@@ -173,7 +173,7 @@ describe('登録', () => {
     // 補う名前が、入力欄の下に表示される(入力欄の値は、書き換えない)
     await waitForText('#rag-registration-name + .field-hint', '「メモ.md」として登録します');
     expect(await valueOf('#rag-registration-name')).toBe('メモ');
-    expect(await textOf('.rag-equipment')).toContain('全機器共通の資料として扱います');
+    expect(await textOf('.rag-equipment')).toContain('共通(タグなし)の資料として扱います');
 
     await view.page.click('#rag-register-submit');
     await view.page.waitForSelector('.rag-success');
@@ -181,7 +181,7 @@ describe('登録', () => {
     const success = await textOf('.rag-success');
     expect(success).toContain('「メモ」を登録しました');
     expect(success).toContain('登録名: メモ.md');
-    expect(success).toContain('機器名: 全機器共通');
+    expect(success).toContain('タグ名: 共通(タグなし)');
     expect(success).toContain('原本PDF: なし');
     expect(stack.rag.documents[0]?.source_file_name).toBe('メモ.md');
     expect(stack.rag.documents[0]?.equipment_names).toEqual([]);
@@ -284,7 +284,7 @@ describe('登録の入力の検証', () => {
     await waitForText('.rag-pdf-row', '未選択');
   });
 
-  it('登録名・本文が空、機器名の追加し忘れ・重複は、送信せずに理由を表示する', async () => {
+  it('登録名・本文が空、タグ名の追加し忘れ・重複は、送信せずに理由を表示する', async () => {
     await openRag();
 
     await view.page.click('#rag-register-submit');
@@ -297,7 +297,7 @@ describe('登録の入力の検証', () => {
     await setMarkdown('本文');
     await view.page.type('#rag-equipment-input', 'ESP-1');
     await view.page.click('#rag-register-submit');
-    await waitForText('.rag-form-error', '入力中の機器名が追加されていません');
+    await waitForText('.rag-form-error', '入力中のタグ名が追加されていません');
 
     // 入力欄に戻って追加し、同じ名前をもう一度追加しようとすると、断る
     await view.page.click('#rag-equipment-input');
@@ -310,7 +310,7 @@ describe('登録の入力の検証', () => {
     expect(POST_DOCUMENTS()).toBe(0);
   });
 
-  it('機器名のチップは、×で外せる', async () => {
+  it('タグ名のチップは、×で外せる', async () => {
     await openRag();
     await view.page.type('#rag-equipment-input', 'ESP-1,ESP-2,');
 
@@ -370,7 +370,7 @@ describe('確認: 一覧', () => {
     );
     // 新しい登録が上
     expect(rows[0]?.text).toContain('安全基準');
-    expect(rows[0]?.text).toContain('全機器共通');
+    expect(rows[0]?.text).toContain('共通(タグなし)');
     expect(rows[0]?.links).toEqual([]);
     expect(rows[1]?.text).toContain('ESP-1');
     expect(rows[1]?.text).toContain('ESP-2');
@@ -494,7 +494,7 @@ describe('確認: 簡易検索', () => {
     expect(await exists('.rag-result')).toBe(false);
   });
 
-  it('機器名の絞り込みと表示件数が、検索のリクエストに反映される', async () => {
+  it('タグ名の絞り込みと表示件数が、検索のリクエストに反映される', async () => {
     await openSearch();
 
     expect(await view.page.$$eval('#rag-search-equipment option', (options) => options.map((o) => o.textContent))).toEqual(['すべて', 'ESP-1', 'R-1']);
@@ -504,7 +504,7 @@ describe('確認: 簡易検索', () => {
     await view.page.waitForSelector('.rag-result');
 
     expect(stack.rag.lastSearchBody).toEqual({ query: '振動', equipment_name: 'ESP-1', top_k: 10 });
-    // 偽サーバは、機器名に合う文書と、機器名なしの文書だけを返す
+    // 偽サーバは、タグ名に合う文書と、タグ名なしの文書だけを返す
     expect(await view.page.$$eval('.rag-result-title', (titles) => titles.map((t) => t.textContent))).toEqual(['ポンプ(サンプル)', 'ポンプ(サンプル)']);
 
     await view.page.select('#rag-search-equipment', '');

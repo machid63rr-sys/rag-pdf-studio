@@ -1,13 +1,13 @@
 """
 マニュアル文書API（機能③: RAG登録）
 
-- POST /documents            : MarkdownをRAGに登録する（機器名・原本PDFは任意）
+- POST /documents            : MarkdownをRAGに登録する（タグ名・原本PDFは任意）
 - GET  /documents            : 登録済み文書の一覧
 - GET  /documents/{id}/pdf   : 原本PDFの配信（検索結果の「PDFを開く」用）
-- GET  /equipment-names      : 登録済みの機器名の一覧（絞り込みのプルダウン用）
+- GET  /equipment-names      : 登録済みのタグ名の一覧（絞り込みのプルダウン用）
 
-登録は、同じファイル名の文書があれば作り直す（置き換え）。機器名を1件も付けない文書は
-機器名未設定の汎用マニュアルとなり、機器名で絞り込んだ検索でも対象に含まれる。
+登録は、同じファイル名の文書があれば作り直す（置き換え）。タグ名を1件も付けない文書は
+タグ名未設定の汎用マニュアルとなり、タグ名で絞り込んだ検索でも対象に含まれる。
 """
 import logging
 from datetime import datetime
@@ -66,7 +66,7 @@ def _normalize_equipment_names(names: List[str]) -> List[str]:
     if too_long:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"機器名が長すぎます（{MAX_NAME_LENGTH}文字以内）: {too_long[0][:30]}…"
+            detail=f"タグ名が長すぎます（{MAX_NAME_LENGTH}文字以内）: {too_long[0][:30]}…"
         )
     return normalized
 
@@ -79,7 +79,7 @@ def create_document(
     markdown_file: UploadFile = File(..., description="登録するMarkdownファイル（.md / .markdown / .txt、UTF-8）"),
     title: Optional[str] = Form(None, description="表示名。省略するとファイル名（拡張子なし）"),
     equipment_names: List[str] = Form(
-        [], description="対象の機器名（例: ESP-1）。複数可。省略すると全機器共通の資料として扱う"),
+        [], description="対象のタグ名（例: ESP-1）。複数可。省略すると共通（タグなし）の資料として扱う"),
     pdf_file: Optional[UploadFile] = File(None, description="原本PDF（任意）。検索結果から開ける"),
     ctx: AppContext = Depends(get_context),
 ):
@@ -146,10 +146,10 @@ def list_documents(ctx: AppContext = Depends(get_context)):
 
 @router.get(
     "/equipment-names", response_model=List[EquipmentNameInfo],
-    summary="登録済みの機器名の一覧（検索の絞り込み用）",
+    summary="登録済みのタグ名の一覧（検索の絞り込み用）",
 )
 def get_equipment_names(ctx: AppContext = Depends(get_context)):
-    """登録済みの機器名の一覧（絞り込みのプルダウン用）"""
+    """登録済みのタグ名の一覧（絞り込みのプルダウン用）"""
     with ctx.db.get_cursor() as cursor:
         cursor.execute(
             "SELECT DISTINCT equipment_name FROM r_manual_document_equipment ORDER BY equipment_name"

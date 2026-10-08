@@ -29,8 +29,8 @@ export const isNearBottom = (metrics: { readonly scrollHeight: number; readonly 
 /** 履歴に出す会話の名前(最初の質問の先頭)。質問がまだ無い会話には、仮の名前を付ける */
 export const sessionTitle = (session: Pick<ChatSession, 'title'>): string => (session.title === null || session.title.trim() === '' ? '(無題のチャット)' : session.title);
 
-/** 会話が絞り込んでいる機器名の表示(絞り込まなければ「全機器」) */
-export const describeSessionEquipment = (equipmentName: string | null): string => equipmentName ?? '全機器';
+/** 会話が絞り込んでいるタグ名の表示(絞り込まなければ「絞り込みなし」) */
+export const describeSessionEquipment = (equipmentName: string | null): string => equipmentName ?? '絞り込みなし';
 
 /** 履歴に出す、会話を始めた日(ブラウザの時間帯)。読み取れない日時は、そのまま表示する */
 export function formatSessionDate(iso: string): string {

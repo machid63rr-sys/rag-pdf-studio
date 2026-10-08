@@ -8,7 +8,7 @@ import pytest
 import requests
 
 from ocr_rag.rag.rag_retriever import ManualRetriever, to_pgvector_literal
-from tests.helpers import fake_embedding, insert_manual_chunk
+from tests.helpers import fake_embedding, insert_extra_chunk, insert_manual_chunk
 
 
 @pytest.fixture
@@ -140,12 +140,12 @@ class TestSearch:
         self, retriever, manual_chunk_factory
     ):
         manual_chunk_factory("ESP-1マニュアル", "ESP-1の内容", fake_embedding(1.0), equipment_names=["ESP-1"])
-        manual_chunk_factory("機器名未設定マニュアル", "汎用内容", fake_embedding(1.0))
+        manual_chunk_factory("タグ名未設定マニュアル", "汎用内容", fake_embedding(1.0))
         manual_chunk_factory("ESP-2マニュアル", "ESP-2の内容", fake_embedding(1.0), equipment_names=["ESP-2"])
 
         results = retriever.search("クエリ", equipment_name="ESP-1", top_k=5)
 
-        assert {r["document_title"] for r in results} == {"ESP-1マニュアル", "機器名未設定マニュアル"}
+        assert {r["document_title"] for r in results} == {"ESP-1マニュアル", "タグ名未設定マニュアル"}
 
     def test_manual_with_multiple_equipment_names_matches_any_of_them(
         self, retriever, manual_chunk_factory
@@ -165,11 +165,11 @@ class TestSearch:
     def test_no_equipment_name_filter_returns_all_manuals(self, retriever, manual_chunk_factory):
         manual_chunk_factory("ESP-1マニュアル", "ESP-1の内容", fake_embedding(1.0), equipment_names=["ESP-1"])
         manual_chunk_factory("ESP-2マニュアル", "ESP-2の内容", fake_embedding(1.0), equipment_names=["ESP-2"])
-        manual_chunk_factory("機器名未設定マニュアル", "汎用内容", fake_embedding(1.0))
+        manual_chunk_factory("タグ名未設定マニュアル", "汎用内容", fake_embedding(1.0))
 
         results = retriever.search("クエリ", top_k=5)
 
-        assert {r["document_title"] for r in results} == {"ESP-1マニュアル", "ESP-2マニュアル", "機器名未設定マニュアル"}
+        assert {r["document_title"] for r in results} == {"ESP-1マニュアル", "ESP-2マニュアル", "タグ名未設定マニュアル"}
 
     @pytest.mark.parametrize("query", ["", "   ", "\n"])
     def test_rejects_blank_query(self, retriever, query):
@@ -180,3 +180,76 @@ class TestSearch:
     def test_rejects_non_positive_top_k(self, retriever, top_k):
         with pytest.raises(ValueError, match="top_k"):
             retriever.search("クエリ", top_k=top_k)
+
+
+# =============================================================================
+# search_tagged()
+# =============================================================================
+
+@pytest.mark.usefixtures("query_matches_unit_vector")
+class TestSearchTagged:
+    def test_returns_only_manuals_with_one_of_the_tag_names(self, retriever, manual_chunk_factory):
+        manual_chunk_factory("Aの資料", "内容", fake_embedding(0.3), equipment_names=["A"])
+        manual_chunk_factory("A・Bの資料", "内容", fake_embedding(0.3), equipment_names=["A", "B"])
+        manual_chunk_factory("Cの資料", "内容", fake_embedding(0.3), equipment_names=["C"])
+
+        results = retriever.search_tagged("クエリ", ["B", "C"])
+
+        assert {r["document_title"] for r in results} == {"A・Bの資料", "Cの資料"}
+
+    def test_excludes_manuals_without_any_tag_unlike_search(self, retriever, manual_chunk_factory):
+        manual_chunk_factory("Aの資料", "内容", fake_embedding(0.3), equipment_names=["A"])
+        manual_chunk_factory("タグなしの資料", "内容", fake_embedding(1.0))
+
+        assert [r["document_title"] for r in retriever.search_tagged("クエリ", ["A"])] == ["Aの資料"]
+
+    def test_returns_low_similarity_chunks_without_a_cutoff(self, retriever, manual_chunk_factory):
+        manual_chunk_factory("Aの資料", "内容", fake_embedding(0.1), equipment_names=["A"])
+
+        results = retriever.search_tagged("クエリ", ["A"])
+
+        assert results[0]["similarity"] == pytest.approx(0.1, abs=1e-4)
+
+    def test_returns_only_the_closest_chunk_of_each_manual(self, retriever, manual_chunk_factory, db):
+        document_id = manual_chunk_factory("Aの資料", "遠い内容", fake_embedding(0.2), equipment_names=["A"])
+        insert_extra_chunk(db, document_id, 1, "近い内容", fake_embedding(0.8))
+        insert_extra_chunk(db, document_id, 2, "中くらいの内容", fake_embedding(0.5))
+        manual_chunk_factory("A・Bの資料", "別の資料の内容", fake_embedding(0.4), equipment_names=["A", "B"])
+
+        results = retriever.search_tagged("クエリ", ["A"])
+
+        # 複数のタグ名が付いた文書も、複数のタグ名に当たっても、1回だけ。類似度の降順
+        assert [(r["document_title"], r["content"]) for r in results] == [
+            ("Aの資料", "近い内容"), ("A・Bの資料", "別の資料の内容"),
+        ]
+        results = retriever.search_tagged("クエリ", ["A", "B"])
+        assert [r["document_title"] for r in results] == ["Aの資料", "A・Bの資料"]
+
+    def test_result_has_the_same_shape_as_search(self, retriever, manual_chunk_factory):
+        document_id = manual_chunk_factory("Aの資料", "本文", fake_embedding(0.5), equipment_names=["A"])
+
+        result = retriever.search_tagged("クエリ", ["A"])[0]
+
+        assert set(result) == {"content", "document_title", "document_id", "similarity"}
+        assert result["document_id"] == str(document_id)
+
+    def test_limits_the_number_of_manuals(self, retriever, manual_chunk_factory):
+        for i in range(4):
+            manual_chunk_factory(f"資料{i}", "内容", fake_embedding(0.5 - i * 0.1), equipment_names=["A"])
+
+        results = retriever.search_tagged("クエリ", ["A"], top_k=2)
+
+        assert [r["document_title"] for r in results] == ["資料0", "資料1"]
+
+    def test_returns_nothing_when_no_manual_has_the_tag(self, retriever, manual_chunk_factory):
+        manual_chunk_factory("Aの資料", "内容", fake_embedding(1.0), equipment_names=["A"])
+
+        assert retriever.search_tagged("クエリ", ["Z"]) == []
+
+    def test_rejects_blank_query_empty_tags_and_non_positive_top_k(self, retriever):
+        with pytest.raises(ValueError, match="検索クエリが空"):
+            retriever.search_tagged("  ", ["A"])
+        with pytest.raises(ValueError, match="タグ名"):
+            retriever.search_tagged("クエリ", [])
+        with pytest.raises(ValueError, match="top_k"):
+            retriever.search_tagged("クエリ", ["A"], top_k=0)
