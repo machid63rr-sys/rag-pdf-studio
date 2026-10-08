@@ -14,11 +14,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ocr_rag.api.app import create_app
+from ocr_rag.chat.chat_service import ChatService
 from ocr_rag.config import Settings
 from ocr_rag.db import Database
 from ocr_rag.ocr_jobs import OcrJobRunner
 from ocr_rag.rag.rag_retriever import ManualRetriever
-from tests.helpers import FakePipeline, SyncExecutor, fake_embedding
+from tests.helpers import FakeLlm, FakePipeline, SyncExecutor, fake_embedding
 
 SCHEMA_SQL_PATH = Path(__file__).parent.parent.parent / "database" / "schema.sql"
 
@@ -81,7 +82,7 @@ def db(_test_database):
     """
     テストDBに接続したDatabase（テスト後にプールを閉じる）。
 
-    テストDBはこのプロジェクト専用なので、各テストの開始時に登録データとOCR下書きを
+    テストDBはこのプロジェクト専用なので、各テストの開始時に登録データ・OCR下書き・チャットの会話を
     全て空にする（テスト間で行が残って結果に影響するのを防ぎ、個別の後片付けを不要にする）。
     """
     assert TEST_DB_PASSWORD  # 未設定なら_test_databaseフィクスチャが先に失敗している
@@ -90,7 +91,7 @@ def db(_test_database):
         user=TEST_DB_USER, password=TEST_DB_PASSWORD, minconn=1, maxconn=5,
     )
     with database.get_cursor() as cursor:
-        cursor.execute("TRUNCATE m_manual_document, t_manual_ocr_draft CASCADE")
+        cursor.execute("TRUNCATE m_manual_document, t_manual_ocr_draft, t_chat_session CASCADE")
     yield database
     database.close()
 
@@ -103,7 +104,7 @@ def settings():
         db_user=TEST_DB_USER, db_password=TEST_DB_PASSWORD or "",
         ollama_host="http://fake-ollama:11434", embedding_model="bge-m3",
         ocr_model="fake-glm-ocr", vision_model="fake-vision",
-        vision_timeout_seconds=7, max_upload_bytes=1024 * 1024,
+        vision_timeout_seconds=7, max_upload_bytes=1024 * 1024, chat_model="fake-chat",
     )
 
 
@@ -115,6 +116,22 @@ def api_retriever(db, settings, monkeypatch):
     )
     monkeypatch.setattr(retriever, "embed", lambda text: fake_embedding(1.0))
     return retriever
+
+
+@pytest.fixture
+def fake_llm():
+    """チャットの回答を作るLLMの偽物（呼び出しの記録・失敗を、テストから指示できる）"""
+    return FakeLlm()
+
+
+@pytest.fixture
+def chat_service(db, api_retriever, settings, fake_llm, monkeypatch):
+    """検索は本物（ダミー埋め込み）、回答を作るLLMだけ偽物のチャットサービス"""
+    service = ChatService(
+        db, api_retriever, ollama_host=settings.ollama_host, chat_model=settings.chat_model
+    )
+    monkeypatch.setattr(service, "_call_llm_stream", fake_llm)
+    return service
 
 
 @pytest.fixture
@@ -130,6 +147,8 @@ def ocr_jobs(db, settings, fake_pipeline):
 
 
 @pytest.fixture
-def client(settings, db, api_retriever, ocr_jobs):
-    """テストDB・ダミー埋め込み・偽のOCRで組み立てたAPIのクライアント"""
-    return TestClient(create_app(settings=settings, db=db, retriever=api_retriever, ocr_jobs=ocr_jobs))
+def client(settings, db, api_retriever, chat_service, ocr_jobs):
+    """テストDB・ダミー埋め込み・偽のLLM・偽のOCRで組み立てたAPIのクライアント"""
+    return TestClient(create_app(
+        settings=settings, db=db, retriever=api_retriever, chat_service=chat_service, ocr_jobs=ocr_jobs,
+    ))

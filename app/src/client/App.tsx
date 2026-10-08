@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import type { FeatureId, MarkdownHandoff, RagHandoff } from './features/handoff';
+import ChatFeature from './features/chat/ChatFeature';
 import OcrFeature from './features/ocr/OcrFeature';
 import PdfEditorFeature from './features/pdf/PdfEditorFeature';
 import RagFeature from './features/rag/RagFeature';
@@ -9,10 +10,11 @@ const FEATURES: readonly { readonly id: FeatureId; readonly label: string }[] = 
   { id: 'pdf', label: '① MD/HTML → PDF' },
   { id: 'ocr', label: '② PDF → OCR → MD' },
   { id: 'rag', label: '③ RAG(登録・確認)' },
+  { id: 'chat', label: '④ AIチャット' },
 ];
 
 /**
- * 画面全体。3つの機能(① MD/HTML → PDF、② PDF → OCR → MD、③ RAG)をタブで切り替える。
+ * 画面全体。4つの機能(① MD/HTML → PDF、② PDF → OCR → MD、③ RAG、④ AIチャット)をタブで切り替える。
  *
  * - 機能は、最初に開いたときに作り、以降は(隠しても)作ったままにする。編集中の文書やOCRの
  *   進み具合が、タブを切り替えても消えないようにするため。
@@ -46,6 +48,7 @@ const App: React.FC = () => {
     pdf: <PdfEditorFeature incoming={toPdfEditor} />,
     ocr: <OcrFeature onSendToPdfEditor={sendToPdfEditor} onSendToRag={sendToRag} />,
     rag: <RagFeature incoming={toRag} />,
+    chat: <ChatFeature />,
   };
 
   return (

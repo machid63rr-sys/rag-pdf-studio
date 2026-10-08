@@ -109,7 +109,14 @@ done
 echo "[ollama-init] Ollamaに接続できました。"
 
 failed=""
+seen=" "
 for model in $REQUIRED_MODELS; do
+  # 同じモデルが複数の用途に指定されている（例: OCRの主文とチャットが同じ）場合は、1回だけ扱う
+  case "$seen" in
+    *" $model "*) continue ;;
+  esac
+  seen="$seen$model "
+
   if has_model "$model"; then
     echo "[ollama-init] $model: 取得済みのため、取得しません。"
     continue
@@ -136,7 +143,7 @@ if [ -n "$failed" ]; then
   echo "[ollama-init] ===== 取得できなかったモデル:${failed} =====" >&2
   echo "[ollama-init] 初回だけは、インターネットへの接続が必要です（モデルを取得するため）。" >&2
   echo "[ollama-init] 接続できる環境で、もう一度 'docker compose up -d' を実行してください（取得済みのモデルはスキップされます）。" >&2
-  echo "[ollama-init] モデル名が正しいかも確認してください（.env の EMBEDDING_MODEL / OCR_MODEL / OCR_VISION_MODEL）。" >&2
+  echo "[ollama-init] モデル名が正しいかも確認してください（.env の EMBEDDING_MODEL / OCR_MODEL / OCR_VISION_MODEL / CHAT_MODEL）。" >&2
   exit 1
 fi
 

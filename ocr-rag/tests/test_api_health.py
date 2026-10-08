@@ -50,7 +50,7 @@ class TestReadyz:
         assert response.status_code == 200
         assert response.json() == {"status": "ok", "missing_models": []}
         assert captured["host"] == settings.ollama_host
-        assert captured["required"] == ["bge-m3", "fake-glm-ocr", "fake-vision"]
+        assert captured["required"] == ["bge-m3", "fake-glm-ocr", "fake-vision", "fake-chat"]
 
     def test_503_lists_missing_models(self, client, monkeypatch):
         monkeypatch.setattr(app_module, "find_missing_models", lambda host, required: ["glm-ocr"])
@@ -84,11 +84,15 @@ class TestReadyz:
 
 
 @pytest.mark.parametrize("model_names,expected", [
-    (("a", "a", "b"), ["a", "b"]),
-    (("a", "b", "c"), ["a", "b", "c"]),
+    (("a", "a", "b", "b"), ["a", "b"]),
+    (("a", "b", "c", "c"), ["a", "b", "c"]),
+    (("a", "b", "c", "d"), ["a", "b", "c", "d"]),
 ])
 def test_required_models_are_distinct_and_ordered(settings, model_names, expected):
     from dataclasses import replace
-    s = replace(settings, embedding_model=model_names[0], ocr_model=model_names[1], vision_model=model_names[2])
+    s = replace(
+        settings, embedding_model=model_names[0], ocr_model=model_names[1],
+        vision_model=model_names[2], chat_model=model_names[3],
+    )
 
     assert s.required_models == expected

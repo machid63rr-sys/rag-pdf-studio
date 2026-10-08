@@ -46,11 +46,14 @@ class Settings:
     vision_timeout_seconds: int
     # アップロード(PDF・Markdown)の上限バイト数
     max_upload_bytes: int
+    # チャット（機能④）の回答を作るモデル。既定はvision_modelと同じ（OCRの主文と同じモデルを使えば、
+    # モデルを1つ多く取得・常駐させずに済む）
+    chat_model: str
 
     @property
     def required_models(self) -> List[str]:
-        """動作に必要なOllamaのモデル（埋め込み・比較OCR・OCR主文）"""
-        return list(dict.fromkeys([self.embedding_model, self.ocr_model, self.vision_model]))
+        """動作に必要なOllamaのモデル（埋め込み・比較OCR・OCR主文・チャットの回答）"""
+        return list(dict.fromkeys([self.embedding_model, self.ocr_model, self.vision_model, self.chat_model]))
 
     @classmethod
     def from_env(cls, env: Optional[Mapping[str, str]] = None) -> "Settings":
@@ -60,6 +63,7 @@ class Settings:
         if not db_password:
             raise ConfigError("環境変数 DB_PASSWORD が設定されていません（既定値は使いません）")
 
+        vision_model = env.get("OCR_VISION_MODEL") or "qwen3.5:9b"
         return cls(
             db_host=env.get("DB_HOST") or "localhost",
             db_port=_positive_int(env, "DB_PORT", 5432),
@@ -69,9 +73,10 @@ class Settings:
             ollama_host=env.get("OLLAMA_HOST") or "http://ollama:11434",
             embedding_model=env.get("EMBEDDING_MODEL") or "bge-m3",
             ocr_model=env.get("OCR_MODEL") or "glm-ocr",
-            vision_model=env.get("OCR_VISION_MODEL") or "qwen3.5:9b",
+            vision_model=vision_model,
             vision_timeout_seconds=_positive_int(
                 env, "OCR_VISION_TIMEOUT_SECONDS", DEFAULT_OCR_VISION_TIMEOUT_SECONDS
             ),
             max_upload_bytes=_positive_int(env, "MAX_UPLOAD_BYTES", DEFAULT_MAX_UPLOAD_BYTES),
+            chat_model=env.get("CHAT_MODEL") or vision_model,
         )

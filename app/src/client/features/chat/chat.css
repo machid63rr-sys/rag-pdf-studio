@@ -1,0 +1,279 @@
+/* ④ AIチャットの画面。色・ボタン・通知などの共通の見た目は、styles.css を使う */
+.chat-feature {
+  display: grid;
+  gap: 12px;
+}
+.chat-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .chat-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 会話の履歴 */
+.chat-sidebar {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  max-height: calc(100vh - 160px);
+  padding: 12px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+.chat-sessions {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chat-session {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+.chat-session:hover {
+  background: #f3f4f6;
+}
+.chat-session-selected {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+}
+.chat-session-confirming {
+  flex-wrap: wrap;
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+}
+.chat-session-main {
+  display: grid;
+  flex: 1 1 0;
+  gap: 0;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.chat-session-main:disabled {
+  cursor: default;
+}
+/* 確認中は、文言を1行に使い、ボタンはその下に並べる(履歴の幅は狭く、横に並べると文言が折れる) */
+.chat-session-confirming .chat-session-main {
+  flex-basis: 100%;
+}
+.chat-session-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+.chat-session-meta,
+.chat-session-confirm-text {
+  color: var(--muted);
+  font-size: 12px;
+}
+.chat-session-confirm-text {
+  color: #b91c1c;
+}
+.chat-session-delete {
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.chat-session-delete:hover:not(:disabled) {
+  color: #b91c1c;
+}
+.chat-session-delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.chat-session-actions {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 6px;
+}
+
+/* 会話 */
+.chat-conversation {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+.chat-messages {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  height: calc(100vh - 380px);
+  min-height: 280px;
+  padding: 8px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #f9fafb;
+}
+.chat-new {
+  display: grid;
+  gap: 16px;
+}
+.chat-new-options {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.chat-new-options label {
+  font-weight: 700;
+}
+.chat-empty {
+  margin: 0;
+  color: var(--muted);
+  text-align: center;
+}
+.chat-pending {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* 発言。質問は右、回答は左に寄せる */
+.chat-bubble {
+  display: grid;
+  gap: 8px;
+  max-width: 88%;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+.chat-bubble-user {
+  justify-self: end;
+  border-color: var(--info-border);
+  background: var(--info-bg);
+}
+.chat-bubble-assistant {
+  justify-self: start;
+}
+/* 回答は、書式を付けない文字として表示する(改行はそのまま) */
+.chat-bubble-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 参照マニュアル */
+.chat-refs {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.chat-refs-title {
+  margin: 0;
+  font-size: 13px;
+}
+.chat-refs-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chat-ref {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #f9fafb;
+  font-size: 13px;
+}
+.chat-ref-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  align-items: center;
+  margin-bottom: 2px;
+}
+.chat-ref-title {
+  font-weight: 700;
+}
+.chat-ref-similarity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chat-ref-similarity-bar {
+  display: inline-block;
+  width: 72px;
+  height: 6px;
+  border-radius: 3px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+.chat-ref-similarity-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+.chat-ref-low .chat-ref-similarity-fill {
+  background: var(--muted);
+}
+.chat-ref-similarity-value {
+  font-variant-numeric: tabular-nums;
+}
+.chat-ref-low-badge {
+  padding: 0 8px;
+  border: 1px solid var(--warning-border);
+  border-radius: 10px;
+  background: var(--warning-bg);
+  font-size: 12px;
+}
+.chat-ref-pdf {
+  margin-left: auto;
+}
+.chat-ref-preview {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-ref-toggle {
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* 入力 */
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.chat-input {
+  flex: 1 1 auto;
+  width: auto;
+  min-height: 64px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.chat-input-row .button {
+  min-width: 5.5em;
+}

@@ -4,7 +4,7 @@ import { sendError } from './apiError.js';
 import type { RagConfig } from './config.js';
 
 // 中継を許す、ocr-rag(Python)のパス。開発者向けの画面(/docs など)は中継しない
-const ALLOWED_PATH = /^\/(?:ocr-drafts|documents|equipment-names|search|healthz|readyz)(?:[/?]|$)/;
+const ALLOWED_PATH = /^\/(?:ocr-drafts|documents|equipment-names|search|chat|healthz|readyz)(?:[/?]|$)/;
 
 // 中継してはならない、接続単位のヘッダ(RFC 9110)。hostは、宛先に合わせて作り直す
 const HOP_BY_HOP = new Set(['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade', 'host']);

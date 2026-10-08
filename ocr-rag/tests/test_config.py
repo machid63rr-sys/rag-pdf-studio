@@ -25,6 +25,7 @@ class TestSettingsFromEnv:
         assert settings.embedding_model == "bge-m3"
         assert settings.ocr_model == "glm-ocr"
         assert settings.vision_model == "qwen3.5:9b"
+        assert settings.chat_model == "qwen3.5:9b"
         assert settings.vision_timeout_seconds == 120
         assert settings.max_upload_bytes == 100 * 1024 * 1024
 
@@ -40,6 +41,15 @@ class TestSettingsFromEnv:
         assert (settings.embedding_model, settings.ocr_model, settings.vision_model) == ("e", "g", "v")
         assert settings.vision_timeout_seconds == 300
         assert settings.max_upload_bytes == 1024
+
+    def test_chat_model_follows_the_vision_model_unless_set(self):
+        assert Settings.from_env(_env(OCR_VISION_MODEL="v")).chat_model == "v"
+        assert Settings.from_env(_env(OCR_VISION_MODEL="v", CHAT_MODEL="c")).chat_model == "c"
+
+    def test_required_models_include_a_separate_chat_model(self):
+        settings = Settings.from_env(_env(CHAT_MODEL="c"))
+
+        assert settings.required_models == ["bge-m3", "glm-ocr", "qwen3.5:9b", "c"]
 
     @pytest.mark.parametrize("env", [{}, {"DB_PASSWORD": ""}])
     def test_missing_db_password_raises(self, env):

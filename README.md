@@ -1,13 +1,14 @@
 # rag-pdf-studio
 
-スキャンPDFを **OCRしてMarkdownにし**、整えて **MD/PDFで出力**し、**RAG（pgvector）に登録して検索で確認**するアプリ。
-ブラウザの1つの画面に、次の3つの機能がタブで並ぶ。
+スキャンPDFを **OCRしてMarkdownにし**、整えて **MD/PDFで出力**し、**RAG（pgvector）に登録して検索で確認**し、登録した内容を根拠に **AIチャットで質問**できるアプリ。
+ブラウザの1つの画面に、次の4つの機能がタブで並ぶ。
 
 | 機能 | 内容 |
 |---|---|
 | **① MD/HTML → PDF** | MarkdownまたはHTMLを取り込み、見たまま編集して、元のファイルとPDFを同時に出力する |
 | **② PDF → OCR → MD** | PDFをOCRし、結果の「確認が必要な箇所」を原本PDFと見比べて直し、Markdownとして保存する。結果は、①（PDFにして出力）や③（RAG登録）へ渡せる |
 | **③ RAG（登録・確認）** | Markdown（と機器名・原本PDF）をRAGに登録する。登録済みの一覧と、質問文での簡易検索で、登録内容を確認する |
+| **④ AIチャット** | 登録した資料について質問する。質問のたびに自動でRAG検索し、見つかった抜粋だけを根拠に、ローカルのLLMが回答する。参照した抜粋と原本PDFも見られる |
 
 OCR・RAGは、**ローカルのモデル（Ollama）で動く**。クラウドには送らない。初回の起動でだけインターネットが要り、以降はオフラインで動く。
 
@@ -17,7 +18,7 @@ OCR・RAGは、**ローカルのモデル（Ollama）で動く**。クラウド�
 
 ```bash
 cp .env.example .env            # DB_PASSWORD に、好きな値を設定する（必須）
-docker compose up -d --build    # NVIDIA GPUがあれば: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+docker compose up -d --build    # NVIDIA GPUがあれば: 下の「GPUを使う」を先に設定する
 ```
 
 ブラウザで **http://localhost:8090** を開く（Chrome または Edge。WSL2でも、Windowsのブラウザから同じURLで開ける）。
@@ -27,6 +28,12 @@ docker compose up -d --build    # NVIDIA GPUがあれば: docker compose -f dock
   取得に失敗した場合は、取れなかったモデルと対処を表示して終了する（もう一度 `docker compose up -d` で、取得済みのモデルは飛ばして続きから取得する）。
 - **2回目以降はオフラインで起動できる**: モデルは名前付きボリューム（`ollama-data`）に残り、取得済みなら取得しない。
 - **GPUが無い環境でも動く**が、OCRは大幅に遅くなる（GPUでも1ページ数分かかる）。
+- **GPUを使う（NVIDIA）**: 既定ではGPUを割り当てないため、OCRはCPUで動く。GPUがあるPCでは、`.env` に
+  `COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml` を書く（`.env.example` の末尾に、コメントアウトした行がある）。
+  以降は `docker compose up -d` だけでGPUが使われる（`docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d` でも同じ）。
+  前提は、NVIDIAドライバと NVIDIA Container Toolkit。使われているかは、OCR中に `docker compose exec ollama ollama ps` の `PROCESSOR` が `100% GPU` になっているかで確認できる。
+- **VRAMは8GB程度が目安**: 主文を読む `qwen3.5:9b`（約5.6GB）と `glm-ocr`（約2.9GB）を、同時に載せると8GBを超える。Ollamaは足りない分をCPUに載せるため、
+  `PROCESSOR` が `xx%/yy% CPU/GPU` になり、遅くなる。他のコンテナ（別のOllamaなど）がGPUを使っている場合も、同じ理由でCPUに流れる。
 - 停止は `docker compose down`（データは残る）。**`docker compose down -v` は、モデル（再取得が必要）と登録したデータを消す**。
 - 認証機能は無い。既定では、このPCからのみ接続できる（`.env` の `BIND_ADDR`）。複数人で共有する場合は、認証を別途用意する。
 
@@ -46,6 +53,19 @@ OCRの結果には**誤読が残ることがある**ため、人が確認して�
 - **登録**: Markdownファイル（または貼り付け）と、登録名・題名・機器名（複数可）・原本PDF（任意）を指定して登録する。
   同じ登録名で登録し直すと置き換わる（原本PDFは、新しく付けなければ引き継がれる）。機器名を付けない資料は、全機器共通の扱い。
 - **確認（一覧・検索）**: 登録済みの文書の一覧（機器名・チャンク数・原本PDF）と、質問文での簡易検索。結果は類似度つきで、類似度が0.5未満のものには「関連度が低い」と出る（しきい値は暫定）。
+
+### ④ AIチャット
+
+- **質問する**: 質問を入力して送信（Enterで送信、Shift+Enterで改行）。質問のたびに、登録済みのマニュアルが**自動で検索**され、その抜粋だけを根拠に回答する。
+  回答は生成と同時に表示される。生成中は「■ 停止」かESCキーで止められる（止めた回答は保存されない）。
+- **根拠の確認**: 回答の下に「参照マニュアル」として、根拠にした抜粋（文書名・類似度・本文）と「原本PDFを開く」が出る。
+- **根拠が無いときは答えない**: 類似度0.45未満の抜粋は根拠にしない（暫定のしきい値）。根拠にできる抜粋が1件も無いときは、モデルを呼ばずに、固定の
+  「登録された資料には、その記載がありません」を返す（参照マニュアルは出ない）。実モデルで、指示だけでは、モデルが資料に無い回答を作り、存在しない資料を引用したため。
+  ③の検索画面の「関連度が低い」（0.5未満）は、表示上の目安で、別の値。
+- **汎用の資料Q&A**: 回答の指示（プロンプト）は、特定の業界・用途に限っていない。登録した資料（マニュアル・仕様書・手順書など）であれば、何についても質問できる。
+- **機器名で絞る**: 会話を始めるときに機器名を選ぶと、その機器の資料と全機器共通の資料だけを検索する。質問文に機器名（例: ESP-1）があれば、そちらが優先される。
+- **履歴**: 左に会話の一覧が出る。開き直して続きを質問でき、削除もできる。認証が無いため、会話は、この画面を使う全員で共有される。
+- 回答を作るモデルは、既定ではOCRの主文を読むモデル（`qwen3.5:9b`）と同じ（`.env` の `CHAT_MODEL` で変えられる）。**OCRの実行中は、同じモデル・GPUを使うため、回答が遅くなる**。
 
 ### ① MD/HTML → PDF
 
@@ -67,7 +87,7 @@ compose は5つのサービスを起動する: `app`（公開は、ブラウザ�
 ## 設定
 
 すべて `.env`（`.env.example` をコピー）で設定する。`DB_PASSWORD` 以外は省略できる。変数の意味は `.env.example` のコメントを参照。
-主なもの: `HOST_PORT`（既定 8090）、`BIND_ADDR`、モデル名（`EMBEDDING_MODEL` `OCR_MODEL` `OCR_VISION_MODEL`）、`OCR_VISION_TIMEOUT_SECONDS`、`MAX_UPLOAD_BYTES`。
+主なもの: `HOST_PORT`（既定 8090）、`BIND_ADDR`、モデル名（`EMBEDDING_MODEL` `OCR_MODEL` `OCR_VISION_MODEL` `CHAT_MODEL`）、`OCR_VISION_TIMEOUT_SECONDS`、`MAX_UPLOAD_BYTES`。
 
 ## ocr-rag の API
 
@@ -83,7 +103,14 @@ compose は5つのサービスを起動する: `app`（公開は、ブラウザ�
 | `POST /documents` | MDをRAG登録する（multipart: `markdown_file`、任意で `title` `equipment_names`（複数）`pdf_file`）。同名は置き換え |
 | `GET /documents` / `GET /documents/{id}/pdf` / `GET /equipment-names` | 登録済みの一覧 / 原本PDF / 機器名の一覧 |
 | `POST /search` | 検索（`query` `equipment_name` `top_k`）。埋め込み検索のみ |
-| `GET /healthz` / `GET /readyz` | DB接続の確認 / DBと必要な3モデルが揃っているかの確認 |
+| `POST /chat/sessions` / `GET /chat/sessions` | 会話を作る（任意で `equipment_name`）/ 会話の一覧（新しい順） |
+| `DELETE /chat/sessions/{id}` / `GET /chat/sessions/{id}/messages` | 会話を削除する / メッセージ（回答には参照マニュアルの控えつき） |
+| `POST /chat/sessions/{id}/messages` | 質問を送り、回答をストリーミングで受け取る（`application/x-ndjson`。下記） |
+| `GET /healthz` / `GET /readyz` | DB接続の確認 / DBと必要なモデルが揃っているかの確認 |
+
+チャットの回答は、改行区切りのJSONで届く: `{"type":"manual_references",...}`（最初に1回。参照マニュアル、無ければ `null`）→
+`{"type":"delta","text":"..."}`（生成の間、くり返し）→ `{"type":"done","message_id":...}`（完了。この時点で回答が保存される）。
+ストリームを始めた後の失敗は、HTTPのステータスで表せないため、`{"type":"error","detail":"..."}` が届く（その回答は保存されない。質問は残る）。
 
 OCRの状態は `QUEUED`（順番待ち）→ `RUNNING`（実行中）→ `DRAFT`（完了。人が確認・修正）/ `FAILED`（失敗。理由つき）/ `DISCARDED`（破棄）。
 OCRは、GPUを占有するため、同時に1件だけ実行する。Ollamaに繋がらない場合は `502`、モデルが足りない場合は `/readyz` が `503` で、足りないモデルを返す。
@@ -118,6 +145,16 @@ docker exec -i rag-pdf-studio-db psql -U postgres -d ragstudio -q < ../database/
 uvicorn ocr_rag.api.app:create_app --factory --host 127.0.0.1 --port 8100
 ```
 
+### 既にあるDBの更新
+
+`database/schema.sql` は、**空のDBへの初回起動でだけ**適用される。機能を足す前に作ったDBには、新しいテーブルが入らない（該当の機能のAPIは、`503` で
+「テーブルが不足しています」と返す）。`database/migrations/` のSQLを、日付の順に、1回ずつ流す（何度流しても安全）。
+
+```bash
+# 2026-10-08 チャット（④）の会話履歴のテーブル
+docker compose exec -T postgres psql -U postgres -d ragstudio < database/migrations/20261008_add_chat_tables.sql
+```
+
 起動に失敗する典型例: `DB_PASSWORD` を設定していないシェルで起動した（`ConfigError`）、`ocr-rag` ディレクトリに入っていない（`No module named 'ocr_rag'`）、DBが動いていない（`Connection refused`）。
 
 ## 由来
@@ -126,6 +163,10 @@ uvicorn ocr_rag.api.app:create_app --factory --host 127.0.0.1 --port 8100
 
 元システムからの主な変更:
 - 系統・ユーザー・認証を削除。登録・検索は機器名だけで絞る
+- チャットは、異常検知システムのチャット（`src/llm/chat_service.py`・`chat.py`・`ChatWidget.tsx`）を作り直したもの。会話の保存・回答のストリーミング・停止・参照マニュアルと原本PDFへのリンク・機器名の解決は引き継ぎ、
+  異常イベント・過去事例の検索、運用上のミスの判定、系統、リランクを除いた。浮動ウィジェットではなく、他の機能と同じタブにした。
+  元は空調設備の保守員向けのプロンプトだったが、このアプリは特定の業界に限らず使えることを目的とするため、業界を限定しない表現にした
+  （OCRのプロンプトは、元のまま「空調設備の機器マニュアル」と書いてある。他の業界の資料で使う場合は、`ocr-rag/ocr_rag/ocr/` のプロンプトの見直しが要る）
 - 動画リンク、リランク（cross-encoder、torch依存）、tesseractを削除
 - OCRを、HTTPの1回の呼び出しで待たせる方式から、バックグラウンド実行＋進捗取得に変更
 - 「下書き→保存＝RAG登録」の一体フローをやめ、MDを直接登録する `POST /documents` を新設
@@ -144,9 +185,13 @@ uvicorn ocr_rag.api.app:create_app --factory --host 127.0.0.1 --port 8100
 既知の課題・未確認:
 - **OCRの表の崩れ**: 複雑な表のページで、誤読や、表の骨格の崩れが残ることがある（元システムの既知の課題を引き継いでいる）。「確認が必要な箇所」に出るので、人が確認して直す。
 - **実モデル（約10GB）の初回取得の所要時間は未計測**（開発機では、極小モデルで取得の流れを確認した）。
-- **GPU上書き**（`docker-compose.gpu.yml`）は、書式の有効性は確認したが、GPU上でのOllama起動は未確認（開発機のGPUが他で使用中のため）。
-- 検索の類似度のしきい値（0.5）は暫定。実際のマニュアルで再確認が必要。
-- スキーマ変更の仕組み（マイグレーション）は未整備。`schema.sql` は、空のDBへの初回起動で適用される。
+- **GPU上書き**（`docker-compose.gpu.yml`）: RTX 3070 Laptop（VRAM 8GB、WSL2）で、OllamaがCUDAのGPUを認識し、`glm-ocr`（num_ctx 16384）が `100% GPU` で載ることを確認した。
+  `qwen3.5:9b` を含むOCR全体を通したGPU上の所要時間と、VRAMが他のプロセスと競合する状況での挙動は未計測。
+- 検索の類似度のしきい値（③の「関連度が低い」0.5、④で根拠にする下限0.45）は暫定。実際のマニュアルで再確認が必要。
+- ④チャットは、追質問の検索に、前の質問を足していない（「その対策は？」のような短い追質問は、検索に当たりにくいことがある。実モデルでは、直前の話題に当たって答えられた）。
+  履歴の「原本PDFを開く」は、同じ登録名で登録し直すと、文書IDが変わって404になる。
+- OCRの画面とチャットは、同じモデル・GPUを使う。OCRの実行中にチャットで質問すると、回答が遅くなる（OCR1ページ分の処理が終わるまで待つ）。
+- スキーマ変更の仕組み（マイグレーションの管理）は未整備。`schema.sql` は、空のDBへの初回起動で適用される。既にあるDBは、`database/migrations/` のSQLを手で流す（上の「既にあるDBの更新」）。
 - 完全にネットが無い環境への配布（`docker save/load` でのイメージ・モデルの持ち込み）は未対応。
 - OCRが完了しても、別のタブにいると気づけない（タブの表示は変わらない）。
 - ブラウザ: ①のフォルダへの直接出力は、Chrome・Edgeのみ（詳細は [docs/feature-pdf-editor.md](docs/feature-pdf-editor.md)）。

@@ -17,7 +17,7 @@ export interface RagHandoff extends MarkdownHandoff {
   readonly pdf: { readonly url: string; readonly fileName: string } | null;
 }
 
-export type FeatureId = 'pdf' | 'ocr' | 'rag';
+export type FeatureId = 'pdf' | 'ocr' | 'rag' | 'chat';
 
 export interface OcrFeatureProps {
   // 「① MD/HTML → PDF で開く」「③ RAG に登録する」の操作

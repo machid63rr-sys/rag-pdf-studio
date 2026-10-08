@@ -107,3 +107,39 @@ class FakePipeline:
         if self.before_return is not None:
             self.before_return()
         return self.result
+
+
+class FakeLlm:
+    """
+    ChatService._call_llm_streamの偽物。実Ollamaは呼ばない。
+
+    渡されたmessagesをcallsに記録し、chunksを順に返す。errorを設定すると、全ての断片を返した後で
+    その例外を投げる（途中まで表示された回答が、失敗で終わる場合の確認用）。
+    closedは、ジェネレータが閉じられた（正常終了・失敗・close()のいずれでも）ことを表す
+    （本物は、閉じるときにOllamaへの接続を閉じる）。
+    """
+
+    def __init__(self, chunks: Sequence[str] = ("これは", "回答です。")):
+        self.chunks = list(chunks)
+        self.error: Optional[Exception] = None
+        self.calls: List[List[Dict[str, str]]] = []
+        self.closed = False
+
+    def __call__(self, messages: List[Dict[str, str]]):
+        self.calls.append(messages)
+        self.closed = False
+        try:
+            yield from self.chunks
+            if self.error is not None:
+                raise self.error
+        finally:
+            self.closed = True
+
+
+def insert_manual_pdf(db, document_id, file_name: str = "原本.pdf") -> None:
+    """マニュアル文書に、原本PDFを登録する"""
+    with db.get_cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO m_manual_pdf (document_id, file_name, content) VALUES (%s, %s, %s)",
+            (str(document_id), file_name, b"%PDF-1.4 fake"),
+        )

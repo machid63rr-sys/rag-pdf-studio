@@ -130,6 +130,29 @@ describe('createRagProxy', () => {
     expect(Buffer.from(await response.arrayBuffer()).equals(pdf)).toBe(true);
   });
 
+  it('ストリームの応答(チャットの回答)は、溜めずに、届いた断片から順に返す', async () => {
+    let finishUpstream: () => void = () => undefined;
+    const finished = new Promise<void>((resolve) => {
+      finishUpstream = resolve;
+    });
+    const upstream = await startUpstream((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+      res.write('{"type":"delta","text":"最初"}\n');
+      // 2つ目の断片は、テストが1つ目を受け取ってから流す(中継が溜めていれば、1つ目も届かない)
+      void finished.then(() => res.end('{"type":"done"}\n'));
+    });
+    const base = await startProxy(upstream.port);
+
+    const response = await fetch(`${base}/chat/sessions/x/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"question":"q"}' });
+    const reader = response.body?.getReader();
+    const first = await Promise.race([reader?.read(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error('最初の断片が、応答の完了まで届かなかった')), 3000))]);
+
+    expect(new TextDecoder().decode(first?.value)).toBe('{"type":"delta","text":"最初"}\n');
+    finishUpstream();
+    const rest = await reader?.read();
+    expect(new TextDecoder().decode(rest?.value)).toBe('{"type":"done"}\n');
+  });
+
   it('hostは、ocr-ragの宛先に作り直す(ブラウザ側のhostを渡さない)', async () => {
     const upstream = await startUpstream((_req, res) => json(res, 200, {}));
     const base = await startProxy(upstream.port);
@@ -148,7 +171,7 @@ describe('createRagProxy', () => {
     expect(upstream.seen[0]?.url).toBe('/base/documents');
   });
 
-  it.each(['/documents', '/documents/x/pdf', '/ocr-drafts', '/ocr-drafts/x', '/equipment-names', '/search', '/healthz', '/readyz'])(
+  it.each(['/documents', '/documents/x/pdf', '/ocr-drafts', '/ocr-drafts/x', '/equipment-names', '/search', '/chat/sessions', '/chat/sessions/x/messages', '/healthz', '/readyz'])(
     '許可したパス %s は、中継する',
     async (path) => {
       const upstream = await startUpstream((_req, res) => json(res, 200, {}));
@@ -158,7 +181,7 @@ describe('createRagProxy', () => {
     },
   );
 
-  it.each(['/', '/docs', '/openapi.json', '/redoc', '/other', '/documentsx', '/ocr-draftsX/1'])('許可していないパス %s は、ocr-ragへ渡さず404にする', async (path) => {
+  it.each(['/', '/docs', '/openapi.json', '/redoc', '/other', '/documentsx', '/ocr-draftsX/1', '/chatter', '/chat-x/sessions'])('許可していないパス %s は、ocr-ragへ渡さず404にする', async (path) => {
     const upstream = await startUpstream((_req, res) => json(res, 200, {}));
     const base = await startProxy(upstream.port);
 

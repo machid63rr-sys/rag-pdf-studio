@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { DiffSegment, DocumentSummary, OcrDraft, OcrDraftStatus, SearchResult } from '../../src/client/ragApi.js';
+import type { ChatMessage, ChatSession, DiffSegment, DocumentSummary, ManualReference, OcrDraft, OcrDraftStatus, SearchResult } from '../../src/client/ragApi.js';
 import { parseMultipart } from './multipart.js';
 
 /*
@@ -17,6 +17,26 @@ export interface FakeDraft extends OcrDraft {
 export interface FakeDocument extends DocumentSummary {
   readonly chunks: string[];
   pdf: Buffer | null;
+}
+
+export interface FakeChatSession extends Omit<ChatSession, 'title'> {
+  // 最初の質問で決まる(本物と同じ)
+  title: string | null;
+  messages: ChatMessage[];
+}
+
+/** 質問に対して、偽サーバが流す回答 */
+export interface ChatReply {
+  // 最初に流す、参照マニュアル(根拠が無いときは null)
+  references: ManualReference[] | null;
+  // 順に流す、回答の断片
+  chunks: string[];
+  // 設定すると、断片をすべて流したあと、完了の代わりに、このエラーのイベントを流す
+  error?: string;
+  // true にすると、完了もエラーも流さずに、ストリームを終える(サーバーが途中で落ちたときの再現)
+  endWithoutDone?: boolean;
+  // 設定すると、この個数の断片を流したあと、releaseChat() が呼ばれる(または、ブラウザが切断する)まで止まる
+  holdAfterChunks?: number;
 }
 
 export interface ReadyConfig {
@@ -48,6 +68,20 @@ export class FakeRagServer {
   lastSearchBody: unknown = null;
   // 設定した文言で、全APIが500を返す(失敗時の画面の確認用)
   failAllWith: string | null = null;
+  // ---- チャット ----
+  readonly chatSessions: FakeChatSession[] = [];
+  chatReply: ChatReply = { references: null, chunks: ['回答です。'] };
+  // 設定すると、質問の送信(ストリームの開始前)が、この状態・理由で失敗する
+  chatMessageError: { status: number; detail: string } | null = null;
+  // 受け取った質問(会話のIDと本文)
+  readonly chatQuestions: { sessionId: string; question: string }[] = [];
+  // 直近の、会話の作成のリクエスト本文
+  lastCreateSessionBody: unknown = null;
+  // 回答の途中で、ブラウザが切断した(停止した)回数
+  chatAborted = 0;
+  // 回答のストリームが、holdAfterChunks で止まっているか
+  chatHeld = false;
+  private chatRelease: (() => void) | null = null;
 
   private constructor(
     private readonly server: Server,
@@ -113,6 +147,37 @@ export class FakeRagServer {
     return document;
   }
 
+  /** 会話を直接作る(画面を開く前の状態を用意する)。新しい会話が、一覧の先頭になる */
+  addChatSession(partial: Partial<FakeChatSession> = {}): FakeChatSession {
+    const session: FakeChatSession = {
+      session_id: randomUUID(),
+      equipment_name: null,
+      title: null,
+      created_at: new Date().toISOString(),
+      messages: [],
+      ...partial,
+    };
+    this.chatSessions.unshift(session);
+    return session;
+  }
+
+  /** チャットの状態を、初期状態に戻す */
+  resetChat(): void {
+    this.chatSessions.length = 0;
+    this.chatReply = { references: null, chunks: ['回答です。'] };
+    this.chatMessageError = null;
+    this.chatQuestions.length = 0;
+    this.lastCreateSessionBody = null;
+    this.chatAborted = 0;
+    this.chatHeld = false;
+    this.chatRelease?.();
+  }
+
+  /** holdAfterChunks で止めていた回答を、続きから流す */
+  releaseChat(): void {
+    this.chatRelease?.();
+  }
+
   /** OCRの進捗を進める(実行中になる) */
   progress(id: string, pagesDone: number, pageCount: number): void {
     this.update(id, { status: 'RUNNING', pages_done: pagesDone, page_count: pageCount });
@@ -173,6 +238,8 @@ export class FakeRagServer {
       this.json(res, 200, names.map((equipment_name) => ({ equipment_name })));
     } else if (root === 'search' && method === 'POST') {
       this.search(res, body);
+    } else if (root === 'chat' && id === 'sessions') {
+      this.chatRoute(res, body, method, segments[2], segments[3]);
     } else {
       this.json(res, 404, { detail: 'Not Found' });
     }
@@ -312,6 +379,98 @@ export class FakeRagServer {
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, request.top_k ?? 5);
     this.json(res, 200, candidates);
+  }
+
+  private chatRoute(res: ServerResponse, body: Buffer, method: string, sessionId: string | undefined, sub: string | undefined): void {
+    if (sessionId === undefined) {
+      if (method === 'POST') {
+        const request = JSON.parse(body.toString('utf8')) as { equipment_name?: string | null };
+        this.lastCreateSessionBody = request;
+        const session = this.addChatSession({ equipment_name: request.equipment_name ?? null });
+        this.json(res, 201, { session_id: session.session_id, equipment_name: session.equipment_name, created_at: session.created_at });
+      } else if (method === 'GET') {
+        this.json(res, 200, this.chatSessions.map(({ messages: _messages, ...summary }) => summary));
+      } else {
+        this.json(res, 405, { detail: 'Method Not Allowed' });
+      }
+      return;
+    }
+
+    const session = this.chatSessions.find((s) => s.session_id === sessionId);
+    if (session === undefined) {
+      this.json(res, 404, { detail: `チャットセッション ${sessionId} が見つかりません` });
+    } else if (sub === undefined && method === 'DELETE') {
+      this.chatSessions.splice(this.chatSessions.indexOf(session), 1);
+      res.writeHead(204);
+      res.end();
+    } else if (sub === 'messages' && method === 'GET') {
+      this.json(res, 200, session.messages);
+    } else if (sub === 'messages' && method === 'POST') {
+      this.chatAnswer(res, body, session);
+    } else {
+      this.json(res, 404, { detail: 'Not Found' });
+    }
+  }
+
+  /** 質問を受け取り、回答をストリーム(改行区切りのJSON)で流す。保存は、本物と同じく、質問は先に、回答は完了したときだけ */
+  private chatAnswer(res: ServerResponse, body: Buffer, session: FakeChatSession): void {
+    if (this.chatMessageError !== null) {
+      this.json(res, this.chatMessageError.status, { detail: this.chatMessageError.detail });
+      return;
+    }
+    const question = (JSON.parse(body.toString('utf8')) as { question?: string }).question ?? '';
+    if (question.trim() === '') {
+      this.json(res, 400, { detail: '質問文が空です' });
+      return;
+    }
+    this.chatQuestions.push({ sessionId: session.session_id, question });
+    const now = (): string => new Date().toISOString();
+    session.messages.push({ message_id: randomUUID(), role: 'user', content: question, manual_references: null, created_at: now() });
+    session.title ??= question.slice(0, 255);
+
+    const reply = this.chatReply;
+    res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+    const send = (event: unknown): void => {
+      res.write(`${JSON.stringify(event)}\n`);
+    };
+    // 回答の途中で、ブラウザが切断した(停止した)ことを知る。止めていた回答も、ここで解く
+    let disconnected = false;
+    res.on('close', () => {
+      if (!res.writableFinished) {
+        disconnected = true;
+        this.chatAborted += 1;
+        this.chatRelease?.();
+      }
+    });
+
+    void (async () => {
+      send({ type: 'manual_references', manual_references: reply.references });
+      for (const [index, text] of reply.chunks.entries()) {
+        if (disconnected) {
+          return;
+        }
+        send({ type: 'delta', text });
+        if (reply.holdAfterChunks === index + 1) {
+          this.chatHeld = true;
+          await new Promise<void>((resolve) => {
+            this.chatRelease = resolve;
+          });
+          this.chatRelease = null;
+          this.chatHeld = false;
+        }
+      }
+      if (disconnected) {
+        return;
+      }
+      if (reply.error !== undefined) {
+        send({ type: 'error', detail: reply.error });
+      } else if (reply.endWithoutDone !== true) {
+        const answer: ChatMessage = { message_id: randomUUID(), role: 'assistant', content: reply.chunks.join(''), manual_references: reply.references, created_at: now() };
+        session.messages.push(answer);
+        send({ type: 'done', message_id: answer.message_id, created_at: answer.created_at });
+      }
+      res.end();
+    })();
   }
 
   private publicDraft(draft: FakeDraft): OcrDraft {

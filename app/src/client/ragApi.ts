@@ -4,6 +4,8 @@
  * エラーは、すべて RagApiError にそろえる(画面は、message をそのまま表示できる)。
  */
 
+import { ChatStreamFormatError, parseChatStreamEvent, splitNdjsonLines } from './chatStream.js';
+
 const BASE = '/api/rag';
 
 export type OcrDraftStatus = 'QUEUED' | 'RUNNING' | 'DRAFT' | 'FAILED' | 'DISCARDED';
@@ -57,6 +59,42 @@ export interface SearchResult {
   // 類似度(1に近いほど、質問に近い内容)
   readonly similarity: number;
 }
+
+/** チャットの回答の根拠にした、登録済みマニュアルの抜粋。回答を生成した時点の内容を、そのまま保存したもの */
+export interface ManualReference {
+  readonly document_title: string;
+  readonly document_id: string;
+  // 類似度(1に近いほど、質問に近い内容)
+  readonly similarity: number;
+  readonly content: string;
+  // 回答を生成した時点で、原本PDFが登録されていたか(リンクを出すかの判定に使う)
+  readonly has_pdf: boolean;
+}
+
+export interface ChatSession {
+  readonly session_id: string;
+  // 会話の最初に絞り込んだ機器名。絞り込まなかったときは null(全機器)
+  readonly equipment_name: string | null;
+  // 最初の質問の先頭。質問がまだ無い会話は null
+  readonly title: string | null;
+  readonly created_at: string;
+}
+
+export interface ChatMessage {
+  readonly message_id: string;
+  readonly role: 'user' | 'assistant';
+  readonly content: string;
+  // 回答(assistant)にだけ付く。根拠にできる抜粋が無かったときは null
+  readonly manual_references: readonly ManualReference[] | null;
+  readonly created_at: string;
+}
+
+/** 回答のストリームで届くイベント。manual_references は最初に1回、done は最後に1回(中断・失敗のときは届かない) */
+export type ChatStreamEvent =
+  | { readonly type: 'manual_references'; readonly manual_references: readonly ManualReference[] | null }
+  | { readonly type: 'delta'; readonly text: string }
+  | { readonly type: 'done'; readonly message_id: string; readonly created_at: string }
+  | { readonly type: 'error'; readonly detail: string };
 
 export type ReadinessCode = 'ok' | 'not_configured' | 'models_missing' | 'unavailable';
 
@@ -264,4 +302,76 @@ export function searchManuals(input: SearchInput, signal?: AbortSignal): Promise
     body.top_k = input.topK;
   }
   return callJson<SearchResult[]>('/search', { ...jsonRequest('POST', body), ...(signal === undefined ? {} : { signal }) });
+}
+
+// ---- ④ AIチャット ----
+
+/** 会話を作る。equipmentName を指定すると、その機器名の資料と、全機器共通の資料だけを根拠にする */
+export function createChatSession(equipmentName: string | null, signal?: AbortSignal): Promise<Pick<ChatSession, 'session_id' | 'equipment_name' | 'created_at'>> {
+  return callJson<Pick<ChatSession, 'session_id' | 'equipment_name' | 'created_at'>>('/chat/sessions', { ...jsonRequest('POST', { equipment_name: equipmentName }), ...(signal === undefined ? {} : { signal }) });
+}
+
+/** 会話の一覧(新しい順) */
+export function listChatSessions(signal?: AbortSignal): Promise<ChatSession[]> {
+  return callJson<ChatSession[]>('/chat/sessions', signal === undefined ? undefined : { signal });
+}
+
+export async function deleteChatSession(sessionId: string): Promise<void> {
+  await call(`/chat/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+}
+
+export function listChatMessages(sessionId: string, signal?: AbortSignal): Promise<ChatMessage[]> {
+  return callJson<ChatMessage[]>(`/chat/sessions/${encodeURIComponent(sessionId)}/messages`, signal === undefined ? undefined : { signal });
+}
+
+/**
+ * 質問を送り、回答をストリームで受け取る。イベントが届くたびに onEvent を呼び、ストリームが終わったら返る。
+ * 中断(signal)は、AbortError のまま投げる。ストリームの途中でつながりが切れた・内容が取り決めと違うときは、RagApiError にする。
+ * 生成の失敗は、投げずに type: 'error' のイベントで届く(ストリームの開始後は、HTTPの状態で失敗を伝えられないため)。
+ */
+export async function streamChatMessage(sessionId: string, question: string, onEvent: (event: ChatStreamEvent) => void, signal?: AbortSignal): Promise<void> {
+  const response = await call(`/chat/sessions/${encodeURIComponent(sessionId)}/messages`, { ...jsonRequest('POST', { question }), ...(signal === undefined ? {} : { signal }) });
+  if (response.body === null) {
+    throw new RagApiError('サーバーの応答に、回答の内容がありません。', response.status, 'invalid_stream');
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  const emit = (line: string): void => {
+    try {
+      onEvent(parseChatStreamEvent(line));
+    } catch (cause) {
+      if (cause instanceof ChatStreamFormatError) {
+        throw new RagApiError(cause.message, response.status, 'invalid_stream');
+      }
+      throw cause;
+    }
+  };
+  try {
+    for (;;) {
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === 'AbortError') {
+          throw cause;
+        }
+        throw new RagApiError('回答の受信の途中で、接続が切れました。', 0, 'network');
+      }
+      if (chunk.done) {
+        break;
+      }
+      const split = splitNdjsonLines(pending, decoder.decode(chunk.value, { stream: true }));
+      pending = split.pending;
+      split.lines.forEach(emit);
+    }
+    // 最後の行に、改行が無いまま終わったときも、取りこぼさない
+    pending += decoder.decode();
+    if (pending.trim() !== '') {
+      emit(pending);
+    }
+  } finally {
+    // 途中で投げたときに、受信を続けたままにしない
+    void reader.cancel().catch(() => undefined);
+  }
 }

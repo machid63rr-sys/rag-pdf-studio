@@ -10,12 +10,14 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
+import psycopg2.errors
 import requests
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from ocr_rag.api import documents, ocr_drafts, search
+from ocr_rag.api import chat, documents, ocr_drafts, search
 from ocr_rag.api.context import AppContext
+from ocr_rag.chat.chat_service import ChatService
 from ocr_rag.config import Settings
 from ocr_rag.db import Database
 from ocr_rag.ocr_jobs import OcrJobRunner
@@ -29,6 +31,7 @@ def create_app(
     settings: Optional[Settings] = None,
     db: Optional[Database] = None,
     retriever: Optional[ManualRetriever] = None,
+    chat_service: Optional[ChatService] = None,
     ocr_jobs: Optional[OcrJobRunner] = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings.from_env()
@@ -43,6 +46,10 @@ def create_app(
         embedding_model=resolved_settings.embedding_model,
     )
 
+    resolved_chat = chat_service or ChatService(
+        resolved_db, resolved_retriever,
+        ollama_host=resolved_settings.ollama_host, chat_model=resolved_settings.chat_model,
+    )
     resolved_ocr_jobs = ocr_jobs or OcrJobRunner(resolved_db, resolved_settings)
 
     @asynccontextmanager
@@ -58,12 +65,14 @@ def create_app(
 
     app = FastAPI(title="rag-pdf-studio ocr-rag", lifespan=lifespan)
     app.state.ctx = AppContext(
-        settings=resolved_settings, db=resolved_db, retriever=resolved_retriever, ocr_jobs=resolved_ocr_jobs
+        settings=resolved_settings, db=resolved_db, retriever=resolved_retriever,
+        chat=resolved_chat, ocr_jobs=resolved_ocr_jobs,
     )
 
     app.include_router(ocr_drafts.router)
     app.include_router(documents.router)
     app.include_router(search.router)
+    app.include_router(chat.router)
 
     @app.exception_handler(requests.RequestException)
     async def _ollama_unavailable(_: Request, exc: requests.RequestException) -> JSONResponse:
@@ -72,6 +81,20 @@ def create_app(
         return JSONResponse(
             status_code=status.HTTP_502_BAD_GATEWAY,
             content={"detail": f"Ollamaへの接続・呼び出しに失敗しました（モデル未取得・停止中の可能性があります）: {exc}"},
+        )
+
+    @app.exception_handler(psycopg2.errors.UndefinedTable)
+    async def _schema_outdated(_: Request, exc: psycopg2.errors.UndefinedTable) -> JSONResponse:
+        # schema.sqlは空のDBへの初回起動でしか適用されないため、機能を足す前に作ったDBには、
+        # 新しいテーブルが無い。500で握り潰さず、何をすればよいかを返す
+        logger.error(f"DBのテーブルが不足しています: {exc}")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "detail": "DBのテーブルが不足しています（機能を追加する前に作ったDBの可能性があります）。"
+                          "database/migrations/ のSQLを適用してください（手順はREADMEの「既にあるDBの更新」）: "
+                          f"{str(exc).splitlines()[0]}"
+            },
         )
 
     @app.get("/healthz", tags=["動作確認"], summary="動作確認（DBに接続できるか）")
