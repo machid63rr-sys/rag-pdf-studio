@@ -29,6 +29,14 @@ def _positive_int(env: Mapping[str, str], name: str, default: int) -> int:
     return value
 
 
+def positive_int_from_environ(name: str, default: int) -> int:
+    """
+    環境変数から正の整数を読む。Settingsを経由しない、モジュール定数(Ollamaの生成の上限など)用。
+    不正な値は、既定値に戻さず、読み込み時に例外にする
+    """
+    return _positive_int(os.environ, name, default)
+
+
 @dataclass(frozen=True)
 class Settings:
     db_host: str

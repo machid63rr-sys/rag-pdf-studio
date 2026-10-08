@@ -3,7 +3,7 @@ ocr_rag/config.py のテスト
 """
 import pytest
 
-from ocr_rag.config import ConfigError, Settings
+from ocr_rag.config import ConfigError, Settings, positive_int_from_environ
 
 
 def _env(**overrides):
@@ -67,3 +67,27 @@ class TestSettingsFromEnv:
     def test_non_positive_value_raises(self, name, value):
         with pytest.raises(ConfigError, match=name):
             Settings.from_env(_env(**{name: value}))
+
+
+class TestPositiveIntFromEnviron:
+    def test_未設定なら既定値(self, monkeypatch):
+        monkeypatch.delenv("OCR_TEST_LIMIT", raising=False)
+
+        assert positive_int_from_environ("OCR_TEST_LIMIT", 16384) == 16384
+
+    def test_空文字なら既定値(self, monkeypatch):
+        monkeypatch.setenv("OCR_TEST_LIMIT", "")
+
+        assert positive_int_from_environ("OCR_TEST_LIMIT", 16384) == 16384
+
+    def test_設定した値を使う(self, monkeypatch):
+        monkeypatch.setenv("OCR_TEST_LIMIT", "32768")
+
+        assert positive_int_from_environ("OCR_TEST_LIMIT", 16384) == 32768
+
+    @pytest.mark.parametrize("value", ["abc", "1.5", "0", "-5"])
+    def test_不正な値は既定値に戻さず例外(self, monkeypatch, value):
+        monkeypatch.setenv("OCR_TEST_LIMIT", value)
+
+        with pytest.raises(ConfigError, match="OCR_TEST_LIMIT"):
+            positive_int_from_environ("OCR_TEST_LIMIT", 16384)

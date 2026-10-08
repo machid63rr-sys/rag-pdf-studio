@@ -97,6 +97,30 @@ class TestServerError:
         assert (text, complete) == ("途中まで", False)
 
 
+class TestOutputLimit:
+    def test_上限で打ち切られても_完了として返し_警告を残す(self, monkeypatch, image_path, caplog):
+        # 上限での打ち切りは、done:trueで返る。繰り返しの暴走を止める役目もあるため、完了として扱う(従来どおり)
+        response = _FakeResponse(200, {
+            "response": "本文", "done": True, "done_reason": "length", "prompt_eval_count": 4143, "eval_count": 2048,
+        })
+        _install_fake_post(monkeypatch, [response])
+
+        with caplog.at_level("WARNING"):
+            text, complete = ocr_with_glm(image_path, "http://ollama:11434")
+
+        assert (text, complete) == ("本文", True)
+        assert "done_reason=length" in caplog.text
+        assert "GLM_OCR_NUM_PREDICT" in caplog.text
+        assert "eval_count=2048" in caplog.text
+
+    def test_リクエストに上限の値が入る(self, monkeypatch, image_path):
+        sent = _install_fake_post(monkeypatch, [_ok("本文")])
+
+        ocr_with_glm(image_path, "http://ollama:11434")
+
+        assert sent[0]["options"]["num_predict"] == ocr_engines.DEFAULT_GLM_OCR_NUM_PREDICT
+
+
 class TestOtherErrorsStillRaise:
     def test_400は例外のまま(self, monkeypatch, image_path):
         # コンテキスト長の超過("request exceeds the available context size")等は、設定の誤りなので隠さない

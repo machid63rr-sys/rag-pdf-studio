@@ -57,6 +57,7 @@ from typing import Dict, List, Optional, Tuple
 import jsonschema
 import requests
 
+from ocr_rag.config import positive_int_from_environ
 from ocr_rag.ocr.ocr_diff import DiffSegment
 
 logger = logging.getLogger(__name__)
@@ -67,7 +68,11 @@ DEFAULT_VISION_TIMEOUT_SECONDS = 120
 # ロードし、画像1枚+複数セグメント分のプロンプトで4096を超えて
 # "request exceeds the available context size" 400エラーになる不具合を確認した
 # （ocr_engines.pyのGLM-OCR側と同じ既知の対策）
-DEFAULT_VISION_NUM_CTX = 16384
+# 2026-10-08: 環境変数 OCR_VISION_NUM_CTX で変えられる。画像のトークン数+プロンプト+出力が、この値に収まらないと、
+# 出力が途中で打ち切られる(done_reason=length)。大きいモデルへの差し替えや、画像が大きいページで、足りなくなりうる。
+# 主文・補正・検証・再チェック・チャットは、同じ値にそろえること(違うと、Ollamaがモデルをロードし直す)。
+# そのため、呼び出しごとの引数にせず、1つのモジュール定数にして、他のモジュールがここから読む
+DEFAULT_VISION_NUM_CTX = positive_int_from_environ("OCR_VISION_NUM_CTX", 16384)
 MAX_VISION_ATTEMPTS = 2  # 失敗時は1回だけリトライする
 
 # ocr_pipeline.pyが「比較材料として使い物にならない(構造が不整合)」を検知するための
@@ -320,7 +325,17 @@ def ocr_full_page_with_vision_llm(
             timeout=timeout_seconds,
         )
         response.raise_for_status()
-        text = response.json()["message"]["content"].strip()
+        data = response.json()
+        text = data["message"]["content"].strip()
+        if data.get("done_reason") == "length":
+            # 2026-10-08: 上限に達して打ち切られた本文は、末尾が欠けているのに、そのまま主文として使われてしまう
+            # (画面では、途中で切れた文章に見える)。原因を切り分けられるよう、使ったトークン数をログに残す
+            logger.warning(
+                f"vision LLMの出力が、上限で打ち切られました(done_reason=length): image={image_path} model={model} "
+                f"num_ctx={DEFAULT_VISION_NUM_CTX} prompt_eval_count={data.get('prompt_eval_count')} "
+                f"eval_count={data.get('eval_count')}。prompt_eval_count+eval_countがnum_ctxに近い場合は、"
+                "環境変数 OCR_VISION_NUM_CTX を増やしてください"
+            )
         return text or None
     except requests.RequestException as e:
         logger.error(f"vision LLMによる代替OCR呼び出し失敗 ({ollama_host}, model={model}, image={image_path}): {e}")

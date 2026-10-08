@@ -228,6 +228,34 @@ class TestOcrFullPageWithVisionLlm:
         assert captured['json']['messages'][0]['images'] == [captured['json']['messages'][0]['images'][0]]
         assert captured['json']['think'] is False
 
+    def test_上限で打ち切られたら_本文は返し_使ったトークン数を警告に残す(self, tmp_path, monkeypatch, caplog):
+        image_path = tmp_path / "page-1.png"
+        image_path.write_bytes(b"fake-png")
+        response = _fake_chat_content_response("途中までの本文")
+        response.json.return_value.update({"done_reason": "length", "prompt_eval_count": 9000, "eval_count": 7384})
+        monkeypatch.setattr(requests, "post", lambda *a, **k: response)
+
+        with caplog.at_level("WARNING"):
+            text = vc.ocr_full_page_with_vision_llm(image_path, "http://fake-ollama:11434")
+
+        assert text == "途中までの本文"
+        assert "done_reason=length" in caplog.text
+        assert "prompt_eval_count=9000" in caplog.text
+        assert "eval_count=7384" in caplog.text
+        assert "OCR_VISION_NUM_CTX" in caplog.text
+
+    def test_正常終了なら_打ち切りの警告は出さない(self, tmp_path, monkeypatch, caplog):
+        image_path = tmp_path / "page-1.png"
+        image_path.write_bytes(b"fake-png")
+        response = _fake_chat_content_response("本文")
+        response.json.return_value.update({"done_reason": "stop"})
+        monkeypatch.setattr(requests, "post", lambda *a, **k: response)
+
+        with caplog.at_level("WARNING"):
+            vc.ocr_full_page_with_vision_llm(image_path, "http://fake-ollama:11434")
+
+        assert "done_reason=length" not in caplog.text
+
     def test_returns_none_on_empty_response(self, tmp_path, monkeypatch):
         image_path = tmp_path / "page-1.png"
         image_path.write_bytes(b"fake-png")

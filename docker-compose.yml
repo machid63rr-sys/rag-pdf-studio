@@ -85,6 +85,8 @@ services:
       OCR_VISION_MODEL: ${OCR_VISION_MODEL:-qwen3.5:9b}
       CHAT_MODEL: ${CHAT_MODEL:-${OCR_VISION_MODEL:-qwen3.5:9b}}
       OCR_VISION_TIMEOUT_SECONDS: ${OCR_VISION_TIMEOUT_SECONDS:-120}
+      OCR_VISION_NUM_CTX: ${OCR_VISION_NUM_CTX:-16384}
+      GLM_OCR_NUM_PREDICT: ${GLM_OCR_NUM_PREDICT:-2048}
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-104857600}
     # OCR中の一時ファイルは /tmp に書く。それ以外は読み取り専用にして、コンテナ側で権限を絞る
     read_only: true

@@ -14,6 +14,8 @@ from typing import Tuple
 
 import requests
 
+from ocr_rag.config import positive_int_from_environ
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_GLM_OCR_MODEL = "glm-ocr"
@@ -23,7 +25,10 @@ DEFAULT_GLM_OCR_TIMEOUT_SECONDS = 120  # vision推論はテキストのみの埋
 # 同じ内容をMarkdownコードフェンス(```)で囲んで際限なく繰り返し続ける現象を確認した
 # （repeat_penalty/temperature=0を試しても解消せず）。num_predictで上限を設け、
 # 応答からは重複ブロックを検出して切り詰める。
-DEFAULT_GLM_OCR_NUM_PREDICT = 2048
+# 2026-10-08: 環境変数 GLM_OCR_NUM_PREDICT で変えられる。密なページ(表・長い文章)は、2048トークンでは足りず、
+# 比較用の本文が末尾で欠けて、主文との差分に、欠けた部分が、大量の食い違いとして出うる。
+# 繰り返しの暴走を止める役目もあるため、大きくしすぎると、暴走時の待ちが延びる(タイムアウト120秒に注意)
+DEFAULT_GLM_OCR_NUM_PREDICT = positive_int_from_environ("GLM_OCR_NUM_PREDICT", 2048)
 # 2026-09-29: 実機で、num_ctx未指定時にollamaがglm-ocrをコンテキスト長4096で
 # ロードし、画像1枚分のトークン+プロンプトだけで4096を超えて
 # "request exceeds the available context size" 400エラーになる不具合を確認した
@@ -116,6 +121,16 @@ def _call_glm_once(
         return "", False
     response.raise_for_status()
     data = response.json()
+
+    if data.get("done_reason") == "length":
+        # 上限での打ち切りは、done:trueで返るため、完了と区別できない。繰り返しの暴走を止めた場合も、
+        # 本当に長いページが欠けた場合も、ここに来る(上のコメントのとおり、暴走は重複除去で扱う)
+        logger.warning(
+            f"GLM-OCRの出力が、上限で打ち切られました(done_reason=length): model={model} "
+            f"num_predict={DEFAULT_GLM_OCR_NUM_PREDICT} num_ctx={DEFAULT_GLM_OCR_NUM_CTX} "
+            f"prompt_eval_count={data.get('prompt_eval_count')} eval_count={data.get('eval_count')}。"
+            "ページが長くて欠けている場合は、環境変数 GLM_OCR_NUM_PREDICT を増やしてください"
+        )
 
     raw_text = data.get("response", "")
     deduped = _dedupe_repeated_output(raw_text)
